@@ -1,82 +1,65 @@
 // Vercel serverless function: وسيط بيانات للأسهم المصرية.
-// المصدر: Yahoo Finance (رموز البورصة المصرية بلاحقة .CA)، وهو غير رسمي وغالبًا متأخر عن السوق.
+// المصدر: ماسح TradingView للبورصة المصرية (غير رسمي، وبياناته غالبًا متأخرة عن السوق).
+// الطلب:  /api/quotes?s=COMI,TALM
+// الرد:   { q: [ { t, p, chg, v, av, rsi, e9, e21, mh, atr } ], ts, delayed, mode }
+//   p=آخر سعر، chg=نسبة التغير %، v=حجم اليوم، av=متوسط حجم 10 أيام،
+//   rsi=RSI(14)، e9/e21=متوسطات متحركة أسية، mh=هيستوجرام MACD، atr=ATR(14)
 
-const YAHOO = 'https://query1.finance.yahoo.com/v8/finance/chart/';
-const UA = 'Mozilla/5.0 (compatible; egx-radar/1.0)';
-const TTL_QUOTE = 3000;
-const TTL_HIST = 10 * 60 * 1000;
-const MAX_SYMBOLS = 80;
-const CONCURRENCY = 8;
+const SCAN = 'https://scanner.tradingview.com/egypt/scan';
+const UA = 'Mozilla/5.0 (compatible; egx-radar/2.0)';
+const COLS = ['close', 'change', 'volume', 'average_volume_10d_calc', 'RSI', 'EMA10', 'EMA20',
+  'MACD.macd', 'MACD.signal', 'ATR', 'update_mode'];
+const TTL = 3000;
+const MAX_SYMBOLS = 100;
 
-const cache = new Map();
+let cache = { key: '', at: 0, body: null };
 
-async function yahoo(symbol, range, interval) {
-  const url = `${YAHOO}${encodeURIComponent(symbol)}.CA?range=${range}&interval=${interval}`;
-  const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
-  if (!r.ok) throw new Error(`${symbol} ${r.status}`);
-  const j = await r.json();
-  const res = j && j.chart && j.chart.result && j.chart.result[0];
-  if (!res) throw new Error(`${symbol} no data`);
-  return res;
-}
+const num = x => (typeof x === 'number' && Number.isFinite(x)) ? x : null;
+const r4 = x => x === null ? null : Math.round(x * 10000) / 10000;
 
-async function getHist(sym) {
-  const key = 'h:' + sym, hit = cache.get(key);
-  if (hit && Date.now() - hit.at < TTL_HIST) return hit.data;
-  const res = await yahoo(sym, '6mo', '1d');
-  const ts = res.timestamp || [], qt = (res.indicators.quote || [{}])[0];
-  const off = res.meta.gmtoffset || 0;
-  const day = t => Math.floor((t + off) / 86400);
-  const out = { c: [], h: [], l: [], v: [] };
-  for (let i = 0; i < ts.length; i++) {
-    if (qt.close[i] == null || qt.high[i] == null || qt.low[i] == null) continue;
-    out.c.push(qt.close[i]); out.h.push(qt.high[i]); out.l.push(qt.low[i]); out.v.push(qt.volume[i] || 0);
+function parse(rows) {
+  const q = []; let streaming = 0;
+  for (const row of rows || []) {
+    const d = row.d || [];
+    const t = String(row.s || '').split(':')[1];
+    const p = num(d[0]);
+    if (!t || !(p > 0)) continue;
+    const macd = num(d[7]), sig = num(d[8]);
+    if (d[10] === 'streaming') streaming++;
+    q.push({
+      t, p: r4(p), chg: r4(num(d[1])), v: num(d[2]) || 0, av: num(d[3]) || 0,
+      rsi: r4(num(d[4])), e9: r4(num(d[5])), e21: r4(num(d[6])),
+      mh: macd !== null && sig !== null ? r4(macd - sig) : null, atr: r4(num(d[9])),
+    });
   }
-  if (ts.length && res.meta.regularMarketTime && day(ts[ts.length - 1]) === day(res.meta.regularMarketTime)) {
-    ['c', 'h', 'l', 'v'].forEach(k => out[k].pop());
-  }
-  cache.set(key, { at: Date.now(), data: out });
-  return out;
-}
-
-async function getQuote(sym) {
-  const key = 'q:' + sym, hit = cache.get(key);
-  if (hit && Date.now() - hit.at < TTL_QUOTE) return hit.data;
-  const res = await yahoo(sym, '1d', '1m');
-  const m = res.meta;
-  const q = { t: sym, p: m.regularMarketPrice, pc: m.chartPreviousClose || m.previousClose, v: m.regularMarketVolume || 0 };
-  cache.set(key, { at: Date.now(), data: q });
-  return q;
-}
-
-async function pool(items, fn) {
-  const out = []; let i = 0;
-  await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
-    while (i < items.length) {
-      const my = items[i++];
-      try { out.push(await fn(my)); } catch (e) { /* skip failed symbol */ }
-    }
-  }));
-  return out;
+  return { q, delayed: !(q.length && streaming === q.length) };
 }
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 's-maxage=2, stale-while-revalidate=5');
   const url = new URL(req.url, 'http://x');
   const syms = (url.searchParams.get('s') || '')
     .split(',').map(s => s.trim().toUpperCase()).filter(s => /^[A-Z0-9]{2,12}$/.test(s)).slice(0, MAX_SYMBOLS);
   if (!syms.length) { res.statusCode = 400; return res.end(JSON.stringify({ error: 'missing s' })); }
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  const key = syms.join(',');
+  if (cache.key === key && Date.now() - cache.at < TTL) return res.end(cache.body);
   try {
-    if (url.searchParams.get('mode') === 'hist') {
-      const rows = await pool(syms, async s => [s, await getHist(s)]);
-      return res.end(JSON.stringify({ h: Object.fromEntries(rows) }));
-    }
-    const q = await pool(syms, getQuote);
+    const r = await fetch(SCAN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': UA, Origin: 'https://www.tradingview.com' },
+      body: JSON.stringify({ symbols: { tickers: syms.map(s => 'EGX:' + s) }, columns: COLS }),
+    });
+    if (!r.ok) throw new Error('scanner ' + r.status);
+    const j = await r.json();
+    const { q, delayed } = parse(j.data);
     if (!q.length) { res.statusCode = 502; return res.end(JSON.stringify({ error: 'no quotes' })); }
-    res.end(JSON.stringify({ q, ts: Date.now(), delayed: true }));
+    const body = JSON.stringify({ q, ts: Date.now(), delayed });
+    cache = { key, at: Date.now(), body };
+    res.end(body);
   } catch (e) {
-    res.statusCode = 502; res.end(JSON.stringify({ error: String(e.message || e) }));
+    res.statusCode = 502;
+    res.end(JSON.stringify({ error: String(e.message || e) }));
   }
 };
