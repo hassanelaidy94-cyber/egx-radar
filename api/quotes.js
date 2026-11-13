@@ -40,6 +40,26 @@ module.exports = async (req, res) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 's-maxage=2, stale-while-revalidate=5');
   const url = new URL(req.url, 'http://x');
+  // بحث عن الرمز الصحيح عند TradingView:  /api/quotes?find=EGX30
+  const find = (url.searchParams.get('find') || '').trim();
+  if (find) {
+    if (!/^[A-Za-z0-9 .\-]{2,30}$/.test(find)) { res.statusCode = 400; return res.end(JSON.stringify({ error: 'bad find' })); }
+    try {
+      const r = await fetch(SCAN, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': UA, Origin: 'https://www.tradingview.com' },
+        body: JSON.stringify({
+          filter: [{ left: 'name', operation: 'match', right: find }],
+          columns: ['name', 'description', 'close', 'type'], range: [0, 20],
+        }),
+      });
+      if (!r.ok) throw new Error('scanner ' + r.status);
+      const j = await r.json();
+      return res.end(JSON.stringify({ found: (j.data || []).map(x => ({ s: x.s, d: x.d })) }));
+    } catch (e) {
+      res.statusCode = 502; return res.end(JSON.stringify({ error: String(e.message || e) }));
+    }
+  }
   const syms = (url.searchParams.get('s') || '')
     .split(',').map(s => s.trim().toUpperCase()).filter(s => /^[A-Z0-9]{2,12}$/.test(s)).slice(0, MAX_SYMBOLS);
   if (!syms.length) { res.statusCode = 400; return res.end(JSON.stringify({ error: 'missing s' })); }
