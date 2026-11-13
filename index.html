@@ -70,6 +70,11 @@
   .score{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:13px;color:var(--mute)}
   .bar{flex:1;height:6px;background:var(--inset);border-radius:99px;overflow:hidden}
   .bar i{display:block;height:100%;background:var(--gold);transition:width .6s}
+  .fc{margin-top:12px;font-size:14px;line-height:1.7;color:var(--text)}
+  .fc b{font-weight:800}.fc .up{color:var(--up)}.fc .down{color:var(--down)}.fc .side{color:var(--mute)}
+  .fc small{color:var(--mute);font-size:12.5px;display:block}
+  .ol{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+  .track{margin-top:8px;font-size:12.5px;color:var(--mute)}
   footer{max-width:720px;margin:0 auto;padding:0 18px 28px;font-size:12.5px;color:var(--mute);line-height:1.8;text-align:center}
   @media (prefers-reduced-motion:reduce){.dot.live{animation:none}.price,.bar i,.open svg{transition:none}}
 </style>
@@ -89,6 +94,7 @@
       <option value="vol">الأعلى سيولة</option>
     </select>
   </div>
+  <div class="track" id="track"></div>
   <div class="chips" id="chips" role="group" aria-label="تصفية">
     <button class="chip" data-f="all" aria-pressed="true">الكل</button>
     <button class="chip" data-f="vol" aria-pressed="false">اختراق سيولة</button>
@@ -190,8 +196,22 @@ function analyze(live, frac) {
   const risk = Number.isFinite(atr) && atr > 0 ? atr * 1.5 : p * 0.05;
   const stop = Math.max(p - risk, p * 0.5);
   const target = p + risk * 5 / 3;
+  // توقع إحصائي: تصويت المؤشرات + نطاق الحركة المعتاد من ATR (ليس تنبؤًا بالسعر)
+  let up = 0, dn = 0;
+  if (ema9 > ema21) up++; else if (ema9 < ema21) dn++;
+  if (macd > 0) up++; else if (macd < 0) dn++;
+  if (rsi >= 50 && rsi <= 75) up++; else if (rsi < 45) dn++;
+  if (p > ema9) up++; else if (p < ema9) dn++;
+  if (chg > 0) up++; else if (chg < 0) dn++;
+  const net = up - dn;
+  const bias = net >= 2 ? 'up' : net <= -2 ? 'down' : 'side';
+  const conf = Math.abs(net) >= 4 ? 'قوية' : Math.abs(net) === 3 ? 'متوسطة' : 'ضعيفة';
+  const A = Number.isFinite(atr) && atr > 0 ? atr : p * 0.03;
+  const sh = bias === 'up' ? 0.15 * A : bias === 'down' ? -0.15 * A : 0;
+  const outlook = { bias, conf, lo: Math.max(0.01, p - 0.5 * A + sh), hi: p + 0.5 * A + sh,
+                    wlo: Math.max(0.01, p - 1.1 * A + sh * 2), whi: p + 1.1 * A + sh * 2 };
   return { p, chg, rsi, ema9, ema21, macd, atr, volRatio, score, badge, stop, target,
-           rr: (target - p) / (p - stop), why, vol: live.v };
+           rr: (target - p) / (p - stop), why, vol: live.v, outlook };
 }
 // ENGINE-END
 
@@ -246,6 +266,7 @@ function buildCard(u) {
       <div class="lv target"><small>الهدف</small><span class="num" data-r="target"></span></div>
       <div class="lv stop"><small>الوقف</small><span class="num" data-r="stop"></span></div>
     </div>
+    <div class="fc" data-r="fc"></div>
     <button class="open" aria-expanded="false"><span>فتح التقرير الفني الكامل</span>${ARROW}</button>
     <div class="report">
       <div class="grid">
@@ -255,6 +276,10 @@ function buildCard(u) {
         <div class="m"><small>متوسط 9</small><span class="num" data-r="e9"></span></div>
         <div class="m"><small>متوسط 21</small><span class="num" data-r="e21"></span></div>
         <div class="m"><small>العائد / المخاطرة</small><span class="num" data-r="rr"></span></div>
+      </div>
+      <div class="ol">
+        <div class="m"><small>نطاق الجلسة المعتاد</small><span class="num" data-r="olr"></span></div>
+        <div class="m"><small>نطاق الأسبوع المعتاد</small><span class="num" data-r="olw"></span></div>
       </div>
       <svg class="spark" viewBox="0 0 300 56" preserveAspectRatio="none" aria-hidden="true"><polyline data-r="line" fill="none" stroke="var(--cyan)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
       <div class="score"><span>قوة الإشارة</span><div class="bar"><i data-r="bar"></i></div><span class="num" data-r="sc"></span></div>
@@ -290,11 +315,16 @@ function paint(u, a) {
   setText(c, 'chg', txt);
   if (c.last.bk !== a.badge.k) { c.last.bk = a.badge.k; r.badge.className = 'badge' + (a.badge.k === 'sell' ? ' sell' : a.badge.k === 'none' ? ' none' : ''); }
   setText(c, 'badge', (a.badge.k === 'none' ? '' : '⚡ ') + a.badge.t);
+  { const o = a.outlook, lab = { up: 'ميل صاعد', down: 'ميل هابط', side: 'عرضي' }[o.bias];
+    const html = `<b class="${o.bias}">التوقع: ${lab}</b> (ثقة ${o.conf})<small>نطاق الجلسة المعتاد ${f2(o.lo)} إلى ${f2(o.hi)}</small>`;
+    if (c.last.fc !== html) { c.last.fc = html; r.fc.innerHTML = html; } }
   setText(c, 'entry', f2(a.p)); setText(c, 'target', f2(a.target)); setText(c, 'stop', f2(a.stop));
   if (c.open()) {
     setText(c, 'rsi', f2(a.rsi)); setText(c, 'macd', f2(a.macd));
     setText(c, 'vr', Number.isFinite(a.volRatio) ? a.volRatio.toFixed(2) + 'x' : '—');
     setText(c, 'e9', f2(a.ema9)); setText(c, 'e21', f2(a.ema21)); setText(c, 'rr', f2(a.rr));
+    setText(c, 'olr', `${f2(a.outlook.lo)} - ${f2(a.outlook.hi)}`);
+    setText(c, 'olw', `${f2(a.outlook.wlo)} - ${f2(a.outlook.whi)}`);
     setText(c, 'sc', a.score + '/100');
     r.bar.style.width = a.score + '%';
     const s = (state.series[u[0]] || []).slice(-60); if (s.length < 2) return c;
@@ -357,6 +387,37 @@ function setStatus() {
   } else { dot.className = 'dot'; st.textContent = 'جاري الاتصال'; }
 }
 
+/* ---------------- سجل دقة التوقعات ---------------- */
+const TRK = 'egx_track_v1';
+function trkLoad() { try { const t = JSON.parse(localStorage.getItem(TRK)); if (t && t.open) return t; } catch (e) {} return { open: {}, hit: 0, n: 0 }; }
+function trkSave(t) { try { localStorage.setItem(TRK, JSON.stringify(t)); } catch (e) {} }
+function cairoNow() {
+  const f = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Cairo', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const g = k => f.find(p => p.type === k).value;
+  return { day: `${g('year')}-${g('month')}-${g('day')}`, wd: g('weekday'), mins: +g('hour') * 60 + +g('minute') };
+}
+function track() {
+  const t = trkLoad();
+  if (state.mode === 'live') {
+    const c = cairoNow();
+    if (c.wd !== 'Fri' && c.wd !== 'Sat') {
+      for (const sym in state.res) {
+        const a = state.res[sym], o = t.open[sym];
+        if (o && o.d < c.day && c.mins >= 660) {            // جلسة جديدة بدأت: قيّم التوقع القديم
+          const mv = (a.p / o.p - 1) * 100;
+          const ok = o.b === 'up' ? mv > 0.3 : o.b === 'down' ? mv < -0.3 : Math.abs(mv) <= 1;
+          t.n++; if (ok) t.hit++; delete t.open[sym];
+        }
+        if (!t.open[sym] && c.mins >= 870) t.open[sym] = { d: c.day, p: a.p, b: a.outlook.bias }; // بعد الإغلاق: سجّل توقع اليوم التالي
+      }
+      trkSave(t);
+    }
+  }
+  $('track').textContent = t.n > 0
+    ? `دقة التوقعات المسجلة: ${t.hit} من ${t.n} (${Math.round(t.hit / t.n * 100)}%)`
+    : 'سجل الدقة: التوقعات بتتسجل بعد إغلاق كل جلسة، والنتيجة بتظهر بعد الجلسة اللي بعدها.';
+}
+
 /* ---------------- التشغيل ---------------- */
 let busy = false;
 async function loop() {
@@ -375,6 +436,7 @@ async function start() {
   catch (e) { state.mode = 'demo'; demoInit(); demoTick(); }
   render(true); setStatus();
   setInterval(loop, CONFIG.POLL_MS);
+  track(); setInterval(track, 30000);
 }
 $('q').addEventListener('input', e => { query = e.target.value.trim(); render(true); });
 $('sort').addEventListener('change', e => { sortBy = e.target.value; render(true); });
