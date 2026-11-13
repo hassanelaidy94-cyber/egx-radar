@@ -105,7 +105,6 @@ const CONFIG = {
   // رابط الخادم. على GitHub Pages ضع رابط Vercel الكامل، أو افتح الصفحة بـ ?api=https://اسمك.vercel.app/api/quotes
   API: (new URLSearchParams(location.search).get('api')) || localStorage.getItem('egx_api') || './api/quotes',
   POLL_MS: 1000,
-  HIST_REFRESH_MS: 10 * 60 * 1000,
   RESORT_MS: 5000,
 };
 { const p = new URLSearchParams(location.search).get('api'); if (p) { try { localStorage.setItem('egx_api', p); } catch (e) {} } }
@@ -152,59 +151,20 @@ const UNIVERSE = [
 
 /* ---------------- محرك التحليل الفني ---------------- */
 // ENGINE-START
-const sum = a => a.reduce((x, y) => x + y, 0);
-const avg = a => a.length ? sum(a) / a.length : NaN;
-function emaSeries(a, n) {
-  const k = 2 / (n + 1); const out = []; let e = a[0];
-  for (let i = 0; i < a.length; i++) { e = i === 0 ? a[0] : a[i] * k + e * (1 - k); out.push(e); }
-  return out;
-}
-function rsi14(c, n = 14) {
-  if (c.length <= n) return NaN;
-  let g = 0, l = 0;
-  for (let i = 1; i <= n; i++) { const d = c[i] - c[i - 1]; if (d >= 0) g += d; else l -= d; }
-  g /= n; l /= n;
-  for (let i = n + 1; i < c.length; i++) {
-    const d = c[i] - c[i - 1];
-    g = (g * (n - 1) + Math.max(d, 0)) / n;
-    l = (l * (n - 1) + Math.max(-d, 0)) / n;
-  }
-  if (l === 0) return g === 0 ? 50 : 100;
-  return 100 - 100 / (1 + g / l);
-}
-function macdHist(c) {
-  if (c.length < 35) return { h: NaN, hPrev: NaN };
-  const e12 = emaSeries(c, 12), e26 = emaSeries(c, 26);
-  const line = c.map((_, i) => e12[i] - e26[i]);
-  const sig = emaSeries(line, 9);
-  const n = c.length;
-  return { h: line[n - 1] - sig[n - 1], hPrev: line[n - 2] - sig[n - 2] };
-}
-function atr14(h, l, c, n = 14) {
-  if (c.length <= n) return NaN;
-  const tr = [];
-  for (let i = 1; i < c.length; i++) tr.push(Math.max(h[i] - l[i], Math.abs(h[i] - c[i - 1]), Math.abs(l[i] - c[i - 1])));
-  return avg(tr.slice(-n));
-}
-// نسبة جلسة التداول المنقضية (10:00 إلى 14:30 بتوقيت القاهرة)
+const fin = x => (typeof x === 'number' && Number.isFinite(x)) ? x : NaN;
+// نسبة جلسة التداول المنقضية (10:00 إلى 14:30 بتوقيت القاهرة، من الأحد إلى الخميس)
 function sessionFraction(now = new Date(), demo = false) {
   if (demo) return 0.5;
-  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(now);
-  const hh = +parts.find(p => p.type === 'hour').value, mm = +parts.find(p => p.type === 'minute').value;
-  const mins = hh * 60 + mm - 600;
-  return Math.min(1, Math.max(0.15, mins / 270));
+  const f = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Cairo', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(now);
+  const g = k => f.find(p => p.type === k).value;
+  const mins = +g('hour') * 60 + +g('minute') - 600;
+  if (g('weekday') === 'Fri' || g('weekday') === 'Sat' || mins < 0 || mins > 270) return 1; // السوق مقفول: الحجم يومي كامل
+  return Math.max(0.1, mins / 270);
 }
-function analyze(hist, live, frac) {
-  const p = live.p, pc = live.pc || hist.c[hist.c.length - 1] || p;
-  const closes = hist.c.concat([p]);
-  const rsi = rsi14(closes);
-  const e9 = emaSeries(closes, 9), e21 = emaSeries(closes, 21);
-  const ema9 = e9[e9.length - 1], ema21 = e21[e21.length - 1];
-  const mc = macdHist(closes);
-  const atr = atr14(hist.h, hist.l, hist.c);
-  const avgVol = avg(hist.v.slice(-20));
-  const volRatio = avgVol > 0 ? (live.v / frac) / avgVol : NaN;
-  const chg = pc ? (p / pc - 1) * 100 : 0;
+function analyze(live, frac) {
+  const p = live.p, chg = fin(live.chg) || 0;
+  const rsi = fin(live.rsi), ema9 = fin(live.e9), ema21 = fin(live.e21), macd = fin(live.mh), atr = fin(live.atr);
+  const volRatio = live.av > 0 ? (live.v / frac) / live.av : NaN;
 
   let score = 0; const why = [];
   if (rsi >= 50 && rsi <= 70) { score += 25; why.push('RSI في منطقة قوة صحية'); }
@@ -212,10 +172,10 @@ function analyze(hist, live, frac) {
   else if (rsi > 70 && rsi <= 80) { score += 15; why.push('RSI مرتفع، احتمال تشبع شراء'); }
   else if (rsi > 80) { score += 5; why.push('RSI فوق 80، تشبع شراء واضح'); }
   else if (rsi < 40) { why.push('RSI ضعيف'); }
-  if (ema9 > ema21) { score += 20; why.push('المتوسط 9 فوق المتوسط 21'); } else why.push('المتوسط 9 تحت المتوسط 21');
+  if (ema9 > ema21) { score += 20; why.push('المتوسط 9 فوق المتوسط 21'); } else if (ema9 <= ema21) why.push('المتوسط 9 تحت المتوسط 21');
   if (p > ema9) score += 10;
-  if (mc.h > 0) { score += 15; why.push('MACD إيجابي'); }
-  if (mc.h > mc.hPrev) score += 10;
+  if (macd > 0) { score += 15; why.push('MACD إيجابي'); }
+  if (macd > 0 && p > ema21) score += 10;
   if (volRatio >= 1.5) { score += 15; why.push('سيولة أعلى من المتوسط بوضوح'); }
   else if (volRatio >= 1) score += 8;
   if (chg > 0) score += 5;
@@ -230,52 +190,37 @@ function analyze(hist, live, frac) {
   const risk = Number.isFinite(atr) && atr > 0 ? atr * 1.5 : p * 0.05;
   const stop = Math.max(p - risk, p * 0.5);
   const target = p + risk * 5 / 3;
-  return { p, pc, chg, rsi, ema9, ema21, macd: mc.h, atr, volRatio, score, badge, stop, target,
-           rr: (target - p) / (p - stop), why, vol: live.v, closes };
+  return { p, chg, rsi, ema9, ema21, macd, atr, volRatio, score, badge, stop, target,
+           rr: (target - p) / (p - stop), why, vol: live.v };
 }
 // ENGINE-END
 
 /* ---------------- مصادر البيانات ---------------- */
-const state = { hist: {}, live: {}, res: {}, mode: 'connecting', delayed: false, lastTs: 0, ticks: 0 };
+const state = { live: {}, res: {}, series: {}, mode: 'connecting', delayed: false, lastTs: 0 };
 
-// وضع تجريبي: أسعار مولّدة عشوائيًا، وليست أسعار السوق
+// وضع تجريبي: أرقام مولّدة عشوائيًا، وليست أسعار السوق
 function demoInit() {
   for (const [t, , , base] of UNIVERSE) {
-    const n = 60, c = [], h = [], l = [], v = [];
-    let x = base * (0.9 + Math.random() * 0.2);
     const bv = 200000 + Math.random() * 3000000;
-    for (let i = 0; i < n; i++) {
-      x *= 1 + (Math.random() - 0.48) * 0.025;
-      c.push(x); h.push(x * (1 + Math.random() * 0.012)); l.push(x * (1 - Math.random() * 0.012));
-      v.push(bv * (0.6 + Math.random() * 0.8));
-    }
-    const k = base / x; // اجعل آخر إغلاق قريبًا من السعر الأساسي
-    state.hist[t] = { c: c.map(a => a * k), h: h.map(a => a * k), l: l.map(a => a * k), v };
-    const pc = state.hist[t].c[n - 1];
-    state.live[t] = { p: pc, pc, v: bv * 0.4 * Math.random(), bv };
+    state.live[t] = { p: base, chg: (Math.random() - 0.5) * 4, v: bv * 0.5 * Math.random() * 3, av: bv,
+      rsi: 30 + Math.random() * 50, e9: base * (1 + (Math.random() - 0.4) * 0.02), e21: base * (1 + (Math.random() - 0.5) * 0.02),
+      mh: (Math.random() - 0.5) * base * 0.01, atr: base * 0.03, bv };
   }
 }
 function demoTick() {
   for (const t in state.live) {
     const s = state.live[t];
     s.p = Math.max(0.05, s.p * (1 + (Math.random() - 0.5) * 0.0016));
-    s.v += s.bv * 0.002 * Math.random() * (Math.random() < 0.03 ? 40 : 1);
+    s.v += s.bv * 0.002 * Math.random();
   }
   state.lastTs = Date.now();
-}
-async function fetchHist() {
-  const syms = UNIVERSE.map(u => u[0]).join(',');
-  const r = await fetch(`${CONFIG.API}?mode=hist&s=${syms}`, { cache: 'no-store' });
-  if (!r.ok) throw new Error('hist ' + r.status);
-  const j = await r.json();
-  Object.assign(state.hist, j.h);
 }
 async function fetchQuotes() {
   const syms = UNIVERSE.map(u => u[0]).join(',');
   const r = await fetch(`${CONFIG.API}?s=${syms}`, { cache: 'no-store' });
   if (!r.ok) throw new Error('quotes ' + r.status);
   const j = await r.json();
-  for (const q of j.q) state.live[q.t] = { p: q.p, pc: q.pc, v: q.v };
+  for (const q of j.q) state.live[q.t] = q;
   state.delayed = !!j.delayed; state.lastTs = j.ts || Date.now();
 }
 
@@ -352,7 +297,8 @@ function paint(u, a) {
     setText(c, 'e9', f2(a.ema9)); setText(c, 'e21', f2(a.ema21)); setText(c, 'rr', f2(a.rr));
     setText(c, 'sc', a.score + '/100');
     r.bar.style.width = a.score + '%';
-    const s = a.closes.slice(-31), mn = Math.min(...s), mx = Math.max(...s), rg = mx - mn || 1;
+    const s = (state.series[u[0]] || []).slice(-60); if (s.length < 2) return c;
+    const mn = Math.min(...s), mx = Math.max(...s), rg = mx - mn || 1;
     r.line.setAttribute('points', s.map((y, i) => `${(i / (s.length - 1) * 300).toFixed(1)},${(52 - (y - mn) / rg *48).toFixed(1)}`).join(' '));
     const w = a.why.join('|');
     if (c.last.why !== w) { c.last.why = w; r.why.innerHTML = ''; a.why.forEach(t => { const li = document.createElement('li'); li.textContent = t; r.why.appendChild(li); }); }
@@ -373,10 +319,12 @@ function render(force) {
   const frac = sessionFraction(new Date(), state.mode === 'demo');
   const rows = [];
   for (const u of UNIVERSE) {
-    const h = state.hist[u[0]], l = state.live[u[0]];
-    if (!h || !l || !h.c || h.c.length < 20 || !(l.p > 0)) continue;
-    const a = analyze(h, l, frac);
+    const l = state.live[u[0]];
+    if (!l || !(l.p > 0)) continue;
+    const a = analyze(l, frac);
     state.res[u[0]] = a;
+    const sr = state.series[u[0]] || (state.series[u[0]] = []);
+    if (sr[sr.length - 1] !== a.p) { sr.push(a.p); if (sr.length > 90) sr.shift(); }
     paint(u, a);
     rows.push([u, a]);
   }
@@ -423,11 +371,10 @@ async function loop() {
   render(false); setStatus();
 }
 async function start() {
-  try { await fetchHist(); await fetchQuotes(); state.mode = 'live'; }
+  try { await fetchQuotes(); state.mode = 'live'; }
   catch (e) { state.mode = 'demo'; demoInit(); demoTick(); }
   render(true); setStatus();
   setInterval(loop, CONFIG.POLL_MS);
-  setInterval(() => { if (state.mode === 'live') fetchHist().catch(() => {}); }, CONFIG.HIST_REFRESH_MS);
 }
 $('q').addEventListener('input', e => { query = e.target.value.trim(); render(true); });
 $('sort').addEventListener('change', e => { sortBy = e.target.value; render(true); });
