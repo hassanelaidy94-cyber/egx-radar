@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1226">
+<title>رادار البورصة</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b1226; --card:#111a33; --line:#1d2a4d; --inset:#0a1022;
+    --text:#e8ecf7; --mute:#8a96b8; --cyan:#4fc3d9;
+    --gold:#e8b94a; --gold-bg:rgba(232,185,74,.12); --gold-line:rgba(232,185,74,.45);
+    --up:#3ddc97; --down:#ff6b81; --flat:#8a96b8;
+  }
+  *{box-sizing:border-box;margin:0}
+  html{-webkit-text-size-adjust:100%}
+  body{background:var(--bg);color:var(--text);font-family:'Cairo',system-ui,sans-serif;min-height:100vh;padding-bottom:env(safe-area-inset-bottom)}
+  .num{font-family:'JetBrains Mono',ui-monospace,monospace;direction:ltr;unicode-bidi:isolate;font-weight:700}
+  header{position:sticky;top:0;z-index:5;background:rgba(11,18,38,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:12px 16px 10px}
+  .top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  h1{font-size:20px;font-weight:800}
+  .status{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mute)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--flat)}
+  .dot.live{background:var(--up);animation:pulse 1s infinite}
+  .dot.delayed{background:var(--gold)}
+  .dot.demo{background:var(--cyan)}
+  @keyframes pulse{50%{opacity:.35}}
+  .banner{margin-top:8px;font-size:12.5px;line-height:1.6;color:var(--gold);background:var(--gold-bg);border:1px solid var(--gold-line);border-radius:10px;padding:7px 10px}
+  .tools{display:flex;gap:8px;margin-top:10px}
+  .tools input,.tools select{flex:1;min-width:0;background:var(--inset);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;font-size:14px}
+  .tools select{flex:0 0 auto}
+  .chips{display:flex;gap:8px;margin-top:10px;overflow-x:auto;scrollbar-width:none}
+  .chip{flex:0 0 auto;border:1px solid var(--line);background:transparent;color:var(--mute);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;cursor:pointer}
+  .chip[aria-pressed=true]{color:var(--gold);border-color:var(--gold-line);background:var(--gold-bg)}
+  :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+  main{padding:14px 14px 40px;display:grid;gap:14px;max-width:720px;margin:0 auto}
+  .empty{text-align:center;color:var(--mute);padding:40px 12px;line-height:1.8}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:18px 18px 8px}
+  .head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .id{text-align:right;min-width:0;flex:1}
+  .badge{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--gold);background:var(--gold-bg);border:1px solid var(--gold-line);border-radius:8px;padding:3px 10px;margin-bottom:8px}
+  .badge.sell{color:var(--down);background:rgba(255,107,129,.1);border-color:rgba(255,107,129,.4)}
+  .badge.none{color:var(--mute);background:transparent;border-color:var(--line)}
+  .name{font-size:19px;font-weight:800;line-height:1.35;overflow-wrap:anywhere}
+  .meta{font-size:13.5px;color:var(--cyan);margin-top:2px}
+  .px{text-align:left;flex:0 0 auto}
+  .price{font-size:26px;line-height:1.1;transition:color .4s}
+  .price.up{color:var(--up)} .price.down{color:var(--down)}
+  .chg{font-size:14px;margin-top:4px}
+  .chg.up{color:var(--up)} .chg.down{color:var(--down)} .chg.flat{color:var(--flat)}
+  .levels{display:grid;grid-template-columns:repeat(3,1fr);background:var(--inset);border:1px solid var(--line);border-radius:14px;margin-top:14px;padding:12px 6px;text-align:center}
+  .lv small{display:block;color:var(--mute);font-size:12.5px;margin-bottom:2px}
+  .lv .num{font-size:17px}
+  .lv.entry .num{color:var(--cyan)} .lv.target .num{color:var(--up)} .lv.stop .num{color:var(--down)}
+  .open{display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:0;border-top:1px solid var(--line);margin-top:14px;padding:12px 2px;color:var(--gold);font:inherit;font-weight:700;font-size:16px;cursor:pointer}
+  .open svg{transition:transform .25s}
+  .open[aria-expanded=true] svg{transform:rotate(-90deg)}
+  .report{display:none;padding:2px 0 14px}
+  .report.show{display:block}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .m{background:var(--inset);border:1px solid var(--line);border-radius:12px;padding:8px;text-align:center}
+  .m small{display:block;color:var(--mute);font-size:12px}
+  .m .num{font-size:15px}
+  .spark{width:100%;height:56px;margin-top:10px;display:block}
+  .why{margin-top:10px;padding-right:18px;font-size:13.5px;line-height:1.9;color:var(--mute)}
+  .score{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:13px;color:var(--mute)}
+  .bar{flex:1;height:6px;background:var(--inset);border-radius:99px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--gold);transition:width .6s}
+  footer{max-width:720px;margin:0 auto;padding:0 18px 28px;font-size:12.5px;color:var(--mute);line-height:1.8;text-align:center}
+  @media (prefers-reduced-motion:reduce){.dot.live{animation:none}.price,.bar i,.open svg{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <h1>رادار البورصة</h1>
+    <div class="status"><span class="dot" id="dot"></span><span id="stat">جاري الاتصال</span></div>
+  </div>
+  <div class="banner" id="banner" hidden></div>
+  <div class="tools">
+    <input id="q" type="search" placeholder="ابحث بالاسم أو الرمز" aria-label="بحث">
+    <select id="sort" aria-label="الترتيب">
+      <option value="score">الأقوى تحليلًا</option>
+      <option value="chg">الأعلى ارتفاعًا</option>
+      <option value="vol">الأعلى سيولة</option>
+    </select>
+  </div>
+  <div class="chips" id="chips" role="group" aria-label="تصفية">
+    <button class="chip" data-f="all" aria-pressed="true">الكل</button>
+    <button class="chip" data-f="vol" aria-pressed="false">اختراق سيولة</button>
+    <button class="chip" data-f="up" aria-pressed="false">زخم صاعد</button>
+    <button class="chip" data-f="sell" aria-pressed="false">ضغط بيع</button>
+  </div>
+</header>
+<main id="list"></main>
+<footer>تحليل آلي للمعلومات فقط، وليس توصية بيع أو شراء. الأسعار قد تتأخر حسب مصدر البيانات.</footer>
+
+<script>
+/* ---------------- الإعدادات ---------------- */
+const CONFIG = {
+  // رابط الخادم. على GitHub Pages ضع رابط Vercel الكامل، أو افتح الصفحة بـ ?api=https://اسمك.vercel.app/api/quotes
+  API: (new URLSearchParams(location.search).get('api')) || localStorage.getItem('egx_api') || './api/quotes',
+  POLL_MS: 1000,
+  HIST_REFRESH_MS: 10 * 60 * 1000,
+  RESORT_MS: 5000,
+};
+{ const p = new URLSearchParams(location.search).get('api'); if (p) { try { localStorage.setItem('egx_api', p); } catch (e) {} } }
+
+/* قائمة الأسهم. أضف أي سهم بنفس الشكل: رمز، اسم، قطاع، سعر تجريبي (يُستخدم في الوضع التجريبي فقط). */
+const UNIVERSE = [
+  ['EGX30ETF','وثائق استثمار EGX 30 INDEX ETF','خدمات مالية غير مصرفية',33.4],
+  ['TALM','تعليم Taaleem Management Services','خدمات تعليمية',8.2],
+  ['MBEN','أم بي للهندسة M.B','خدمات و منتجات صناعية وسيارات',1.75],
+  ['ISPH','ابن سينا فارما','رعاية صحية و ادوية',3.45],
+  ['COMI','البنك التجاري الدولي','بنوك',95],
+  ['HRHO','إي إف جي القابضة','خدمات مالية غير مصرفية',22],
+  ['TMGH','مجموعة طلعت مصطفى القابضة','عقارات',75],
+  ['EFIH','إي فاينانس','تكنولوجيا ومدفوعات',20],
+  ['ETEL','المصرية للاتصالات','اتصالات',80],
+  ['SWDY','السويدي إليكتريك','صناعة وكابلات',65],
+  ['ORWE','النساجون الشرقيون','منسوجات',28],
+  ['EAST','إيسترن كومباني','تبغ',28],
+  ['ABUK','أبوقير للأسمدة','كيماويات',55],
+  ['MFPC','موبكو للأسمدة','كيماويات',30],
+  ['ESRS','حديد عز','موارد أساسية',60],
+  ['PHDC','بالم هيلز للتعمير','عقارات',8],
+  ['ORAS','أوراسكوم للإنشاءات','إنشاءات',280],
+  ['FWRY','فوري','تكنولوجيا ومدفوعات',16],
+  ['EKHO','القابضة المصرية الكويتية','قابضة',2],
+  ['JUFO','جهينة للصناعات الغذائية','أغذية',24],
+  ['CLHO','مستشفى كليوباترا','رعاية صحية و ادوية',9],
+  ['EMFD','إعمار مصر للتنمية','عقارات',11],
+  ['AMOC','أموك','بترول وكيماويات',9],
+  ['CCAP','القلعة','خدمات مالية غير مصرفية',3],
+  ['OCDI','سوديك','عقارات',45],
+  ['MNHD','مدينة نصر للإسكان','عقارات',7],
+  ['PHAR','المصرية الدولية للصناعات الدوائية','رعاية صحية و ادوية',60],
+  ['ADIB','بنك أبوظبي الإسلامي مصر','بنوك',40],
+  ['CIEB','كريدي أجريكول مصر','بنوك',25],
+  ['HELI','مصر الجديدة للإسكان','عقارات',12],
+  ['BTFH','بلتون القابضة','خدمات مالية غير مصرفية',4],
+  ['ORHD','أوراسكوم للتنمية مصر','عقارات',14],
+  ['SKPC','سيدي كرير للبتروكيماويات','كيماويات',22],
+  ['EGAL','مصر للألومنيوم','موارد أساسية',200],
+  ['TAQA','طاقة عربية','طاقة ومرافق',9],
+  ['GBCO','جي بي أوتو','خدمات و منتجات صناعية وسيارات',18],
+];
+
+/* ---------------- محرك التحليل الفني ---------------- */
+// ENGINE-START
+const sum = a => a.reduce((x, y) => x + y, 0);
+const avg = a => a.length ? sum(a) / a.length : NaN;
+function emaSeries(a, n) {
+  const k = 2 / (n + 1); const out = []; let e = a[0];
+  for (let i = 0; i < a.length; i++) { e = i === 0 ? a[0] : a[i] * k + e * (1 - k); out.push(e); }
+  return out;
+}
+function rsi14(c, n = 14) {
+  if (c.length <= n) return NaN;
+  let g = 0, l = 0;
+  for (let i = 1; i <= n; i++) { const d = c[i] - c[i - 1]; if (d >= 0) g += d; else l -= d; }
+  g /= n; l /= n;
+  for (let i = n + 1; i < c.length; i++) {
+    const d = c[i] - c[i - 1];
+    g = (g * (n - 1) + Math.max(d, 0)) / n;
+    l = (l * (n - 1) + Math.max(-d, 0)) / n;
+  }
+  if (l === 0) return g === 0 ? 50 : 100;
+  return 100 - 100 / (1 + g / l);
+}
+function macdHist(c) {
+  if (c.length < 35) return { h: NaN, hPrev: NaN };
+  const e12 = emaSeries(c, 12), e26 = emaSeries(c, 26);
+  const line = c.map((_, i) => e12[i] - e26[i]);
+  const sig = emaSeries(line, 9);
+  const n = c.length;
+  return { h: line[n - 1] - sig[n - 1], hPrev: line[n - 2] - sig[n - 2] };
+}
+function atr14(h, l, c, n = 14) {
+  if (c.length <= n) return NaN;
+  const tr = [];
+  for (let i = 1; i < c.length; i++) tr.push(Math.max(h[i] - l[i], Math.abs(h[i] - c[i - 1]), Math.abs(l[i] - c[i - 1])));
+  return avg(tr.slice(-n));
+}
+// نسبة جلسة التداول المنقضية (10:00 إلى 14:30 بتوقيت القاهرة)
+function sessionFraction(now = new Date(), demo = false) {
+  if (demo) return 0.5;
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(now);
+  const hh = +parts.find(p => p.type === 'hour').value, mm = +parts.find(p => p.type === 'minute').value;
+  const mins = hh * 60 + mm - 600;
+  return Math.min(1, Math.max(0.15, mins / 270));
+}
+function analyze(hist, live, frac) {
+  const p = live.p, pc = live.pc || hist.c[hist.c.length - 1] || p;
+  const closes = hist.c.concat([p]);
+  const rsi = rsi14(closes);
+  const e9 = emaSeries(closes, 9), e21 = emaSeries(closes, 21);
+  const ema9 = e9[e9.length - 1], ema21 = e21[e21.length - 1];
+  const mc = macdHist(closes);
+  const atr = atr14(hist.h, hist.l, hist.c);
+  const avgVol = avg(hist.v.slice(-20));
+  const volRatio = avgVol > 0 ? (live.v / frac) / avgVol : NaN;
+  const chg = pc ? (p / pc - 1) * 100 : 0;
+
+  let score = 0; const why = [];
+  if (rsi >= 50 && rsi <= 70) { score += 25; why.push('RSI في منطقة قوة صحية'); }
+  else if (rsi >= 40 && rsi < 50) { score += 10; }
+  else if (rsi > 70 && rsi <= 80) { score += 15; why.push('RSI مرتفع، احتمال تشبع شراء'); }
+  else if (rsi > 80) { score += 5; why.push('RSI فوق 80، تشبع شراء واضح'); }
+  else if (rsi < 40) { why.push('RSI ضعيف'); }
+  if (ema9 > ema21) { score += 20; why.push('المتوسط 9 فوق المتوسط 21'); } else why.push('المتوسط 9 تحت المتوسط 21');
+  if (p > ema9) score += 10;
+  if (mc.h > 0) { score += 15; why.push('MACD إيجابي'); }
+  if (mc.h > mc.hPrev) score += 10;
+  if (volRatio >= 1.5) { score += 15; why.push('سيولة أعلى من المتوسط بوضوح'); }
+  else if (volRatio >= 1) score += 8;
+  if (chg > 0) score += 5;
+  score = Math.max(0, Math.min(100, Math.round(score)));
+
+  let badge;
+  if (volRatio >= 1.5) badge = { k: 'vol', t: `اختراق سيولة (${volRatio.toFixed(2)}x)` };
+  else if (score >= 65) badge = { k: 'up', t: `زخم صاعد (${score}/100)` };
+  else if (score <= 30) badge = { k: 'sell', t: 'ضغط بيع' };
+  else badge = { k: 'none', t: 'محايد' };
+
+  const risk = Number.isFinite(atr) && atr > 0 ? atr * 1.5 : p * 0.05;
+  const stop = Math.max(p - risk, p * 0.5);
+  const target = p + risk * 5 / 3;
+  return { p, pc, chg, rsi, ema9, ema21, macd: mc.h, atr, volRatio, score, badge, stop, target,
+           rr: (target - p) / (p - stop), why, vol: live.v, closes };
+}
+// ENGINE-END
+
+/* ---------------- مصادر البيانات ---------------- */
+const state = { hist: {}, live: {}, res: {}, mode: 'connecting', delayed: false, lastTs: 0, ticks: 0 };
+
+// وضع تجريبي: أسعار مولّدة عشوائيًا، وليست أسعار السوق
+function demoInit() {
+  for (const [t, , , base] of UNIVERSE) {
+    const n = 60, c = [], h = [], l = [], v = [];
+    let x = base * (0.9 + Math.random() * 0.2);
+    const bv = 200000 + Math.random() * 3000000;
+    for (let i = 0; i < n; i++) {
+      x *= 1 + (Math.random() - 0.48) * 0.025;
+      c.push(x); h.push(x * (1 + Math.random() * 0.012)); l.push(x * (1 - Math.random() * 0.012));
+      v.push(bv * (0.6 + Math.random() * 0.8));
+    }
+    const k = base / x; // اجعل آخر إغلاق قريبًا من السعر الأساسي
+    state.hist[t] = { c: c.map(a => a * k), h: h.map(a => a * k), l: l.map(a => a * k), v };
+    const pc = state.hist[t].c[n - 1];
+    state.live[t] = { p: pc, pc, v: bv * 0.4 * Math.random(), bv };
+  }
+}
+function demoTick() {
+  for (const t in state.live) {
+    const s = state.live[t];
+    s.p = Math.max(0.05, s.p * (1 + (Math.random() - 0.5) * 0.0016));
+    s.v += s.bv * 0.002 * Math.random() * (Math.random() < 0.03 ? 40 : 1);
+  }
+  state.lastTs = Date.now();
+}
+async function fetchHist() {
+  const syms = UNIVERSE.map(u => u[0]).join(',');
+  const r = await fetch(`${CONFIG.API}?mode=hist&s=${syms}`, { cache: 'no-store' });
+  if (!r.ok) throw new Error('hist ' + r.status);
+  const j = await r.json();
+  Object.assign(state.hist, j.h);
+}
+async function fetchQuotes() {
+  const syms = UNIVERSE.map(u => u[0]).join(',');
+  const r = await fetch(`${CONFIG.API}?s=${syms}`, { cache: 'no-store' });
+  if (!r.ok) throw new Error('quotes ' + r.status);
+  const j = await r.json();
+  for (const q of j.q) state.live[q.t] = { p: q.p, pc: q.pc, v: q.v };
+  state.delayed = !!j.delayed; state.lastTs = j.ts || Date.now();
+}
+
+/* ---------------- واجهة العرض ---------------- */
+const $ = id => document.getElementById(id);
+const listEl = $('list');
+const cards = new Map();
+let filter = 'all', sortBy = 'score', query = '', lastSort = 0, order = [];
+const f2 = n => Number.isFinite(n) ? n.toFixed(2) : '—';
+
+const ARROW = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>';
+
+function buildCard(u) {
+  const el = document.createElement('article');
+  el.className = 'card';
+  el.innerHTML = `
+    <div class="head">
+      <div class="px"><div class="price num" data-r="price"></div><div class="chg num" data-r="chg"></div></div>
+      <div class="id"><span class="badge" data-r="badge"></span><div class="name"></div><div class="meta"></div></div>
+    </div>
+    <div class="levels">
+      <div class="lv entry"><small>الدخول</small><span class="num" data-r="entry"></span></div>
+      <div class="lv target"><small>الهدف</small><span class="num" data-r="target"></span></div>
+      <div class="lv stop"><small>الوقف</small><span class="num" data-r="stop"></span></div>
+    </div>
+    <button class="open" aria-expanded="false"><span>فتح التقرير الفني الكامل</span>${ARROW}</button>
+    <div class="report">
+      <div class="grid">
+        <div class="m"><small>RSI</small><span class="num" data-r="rsi"></span></div>
+        <div class="m"><small>MACD</small><span class="num" data-r="macd"></span></div>
+        <div class="m"><small>السيولة / المتوسط</small><span class="num" data-r="vr"></span></div>
+        <div class="m"><small>متوسط 9</small><span class="num" data-r="e9"></span></div>
+        <div class="m"><small>متوسط 21</small><span class="num" data-r="e21"></span></div>
+        <div class="m"><small>العائد / المخاطرة</small><span class="num" data-r="rr"></span></div>
+      </div>
+      <svg class="spark" viewBox="0 0 300 56" preserveAspectRatio="none" aria-hidden="true"><polyline data-r="line" fill="none" stroke="var(--cyan)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+      <div class="score"><span>قوة الإشارة</span><div class="bar"><i data-r="bar"></i></div><span class="num" data-r="sc"></span></div>
+      <ul class="why" data-r="why"></ul>
+    </div>`;
+  el.querySelector('.name').textContent = u[1];
+  el.querySelector('.meta').textContent = `${u[2]} • ${u[0]}`;
+  const btn = el.querySelector('.open'), rep = el.querySelector('.report');
+  btn.addEventListener('click', () => {
+    const open = rep.classList.toggle('show');
+    btn.setAttribute('aria-expanded', open);
+  });
+  const refs = {};
+  el.querySelectorAll('[data-r]').forEach(n => refs[n.dataset.r] = n);
+  return { el, refs, last: {}, open: () => rep.classList.contains('show') };
+}
+function setText(c, k, v) { if (c.last[k] !== v) { c.last[k] = v; c.refs[k].textContent = v; } }
+
+function paint(u, a) {
+  let c = cards.get(u[0]);
+  if (!c) { c = buildCard(u); cards.set(u[0], c); }
+  const r = c.refs;
+  const prev = c.last.p;
+  setText(c, 'price', f2(a.p));
+  if (prev !== undefined && prev !== a.p) {
+    r.price.className = 'price num ' + (a.p > prev ? 'up' : 'down');
+    clearTimeout(c.t); c.t = setTimeout(() => r.price.className = 'price num', 600);
+  }
+  c.last.p = a.p;
+  const cls = a.chg > 0.005 ? 'up' : a.chg < -0.005 ? 'down' : 'flat';
+  const txt = `${a.chg >= 0 ? '+' : '−'}${Math.abs(a.chg).toFixed(2)}%`;
+  if (r.chg.className !== 'chg num ' + cls) r.chg.className = 'chg num ' + cls;
+  setText(c, 'chg', txt);
+  if (c.last.bk !== a.badge.k) { c.last.bk = a.badge.k; r.badge.className = 'badge' + (a.badge.k === 'sell' ? ' sell' : a.badge.k === 'none' ? ' none' : ''); }
+  setText(c, 'badge', (a.badge.k === 'none' ? '' : '⚡ ') + a.badge.t);
+  setText(c, 'entry', f2(a.p)); setText(c, 'target', f2(a.target)); setText(c, 'stop', f2(a.stop));
+  if (c.open()) {
+    setText(c, 'rsi', f2(a.rsi)); setText(c, 'macd', f2(a.macd));
+    setText(c, 'vr', Number.isFinite(a.volRatio) ? a.volRatio.toFixed(2) + 'x' : '—');
+    setText(c, 'e9', f2(a.ema9)); setText(c, 'e21', f2(a.ema21)); setText(c, 'rr', f2(a.rr));
+    setText(c, 'sc', a.score + '/100');
+    r.bar.style.width = a.score + '%';
+    const s = a.closes.slice(-31), mn = Math.min(...s), mx = Math.max(...s), rg = mx - mn || 1;
+    r.line.setAttribute('points', s.map((y, i) => `${(i / (s.length - 1) * 300).toFixed(1)},${(52 - (y - mn) / rg *48).toFixed(1)}`).join(' '));
+    const w = a.why.join('|');
+    if (c.last.why !== w) { c.last.why = w; r.why.innerHTML = ''; a.why.forEach(t => { const li = document.createElement('li'); li.textContent = t; r.why.appendChild(li); }); }
+  }
+  return c;
+}
+
+function passes(u, a) {
+  if (query) {
+    const q = query.toLowerCase();
+    if (!(u[0].toLowerCase().includes(q) || u[1].toLowerCase().includes(q))) return false;
+  }
+  if (filter === 'all') return true;
+  return a.badge.k === filter || (filter === 'up' && a.badge.k === 'up');
+}
+
+function render(force) {
+  const frac = sessionFraction(new Date(), state.mode === 'demo');
+  const rows = [];
+  for (const u of UNIVERSE) {
+    const h = state.hist[u[0]], l = state.live[u[0]];
+    if (!h || !l || !h.c || h.c.length < 20 || !(l.p > 0)) continue;
+    const a = analyze(h, l, frac);
+    state.res[u[0]] = a;
+    paint(u, a);
+    rows.push([u, a]);
+  }
+  const now = Date.now();
+  if (force || now - lastSort > CONFIG.RESORT_MS) {
+    lastSort = now;
+    const vis = rows.filter(([u, a]) => passes(u, a));
+    vis.sort((x, y) => sortBy === 'chg' ? y[1].chg - x[1].chg : sortBy === 'vol' ? (y[1].volRatio || 0) - (x[1].volRatio || 0) : y[1].score - x[1].score);
+    order = vis.map(([u]) => u[0]);
+    const keep = new Set(order);
+    listEl.querySelectorAll('.empty').forEach(n => n.remove());
+    for (const [t, c] of cards) if (!keep.has(t) && c.el.parentNode) c.el.remove();
+    order.forEach(t => listEl.appendChild(cards.get(t).el));
+    if (!order.length) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = rows.length ? 'مفيش أسهم بتطابق التصفية دلوقتي. جرّب فلتر تاني.' : 'مستني أول بيانات من المصدر.'; listEl.appendChild(d); }
+  }
+}
+
+function setStatus() {
+  const dot = $('dot'), st = $('stat'), bn = $('banner');
+  const t = state.lastTs ? new Date(state.lastTs).toLocaleTimeString('ar-EG', { timeZone: 'Africa/Cairo' }) : '';
+  if (state.mode === 'demo') {
+    dot.className = 'dot demo'; st.textContent = 'تجريبي ' + t;
+    bn.hidden = false;
+    bn.textContent = 'وضع تجريبي: الأسعار هنا مولّدة عشوائيًا وليست أسعار السوق. اربط التطبيق بالخادم (api/quotes.js) عشان يعرض بيانات حقيقية.';
+  } else if (state.mode === 'live') {
+    dot.className = 'dot ' + (state.delayed ? 'delayed' : 'live');
+    st.textContent = (state.delayed ? 'متأخر ' : 'مباشر ') + t;
+    bn.hidden = !state.delayed;
+    if (state.delayed) bn.textContent = 'مصدر البيانات الحالي متأخر عن السوق. للأسعار اللحظية الفعلية استخدم مزوّد بيانات مدفوع.';
+  } else { dot.className = 'dot'; st.textContent = 'جاري الاتصال'; }
+}
+
+/* ---------------- التشغيل ---------------- */
+let busy = false;
+async function loop() {
+  if (busy) return; busy = true;
+  try {
+    if (state.mode === 'demo') demoTick();
+    else { await fetchQuotes(); state.mode = 'live'; }
+  } catch (e) {
+    if (state.mode !== 'live') { state.mode = 'demo'; demoInit(); }
+  }
+  busy = false;
+  render(false); setStatus();
+}
+async function start() {
+  try { await fetchHist(); await fetchQuotes(); state.mode = 'live'; }
+  catch (e) { state.mode = 'demo'; demoInit(); demoTick(); }
+  render(true); setStatus();
+  setInterval(loop, CONFIG.POLL_MS);
+  setInterval(() => { if (state.mode === 'live') fetchHist().catch(() => {}); }, CONFIG.HIST_REFRESH_MS);
+}
+$('q').addEventListener('input', e => { query = e.target.value.trim(); render(true); });
+$('sort').addEventListener('change', e => { sortBy = e.target.value; render(true); });
+$('chips').addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if (!b) return;
+  filter = b.dataset.f;
+  document.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', x === b));
+  render(true);
+});
+start();
+</script>
+</body>
+</html>
