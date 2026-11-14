@@ -75,6 +75,9 @@
   .score{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:13px;color:var(--mute)}
   .bar{flex:1;height:6px;background:var(--inset);border-radius:99px;overflow:hidden}
   .bar i{display:block;height:100%;background:var(--gold);transition:width .6s}
+  .star{background:none;border:0;color:var(--mute);font-size:26px;line-height:1;padding:2px 0;margin-top:2px;cursor:pointer}
+  .star[aria-pressed=true]{color:var(--gold)}
+  .note{margin-top:8px;font-size:12.5px;color:var(--gold);line-height:1.7}
   .fc{margin-top:12px;font-size:14px;line-height:1.7;color:var(--text)}
   .fc b{font-weight:800}.fc .up{color:var(--up)}.fc .down{color:var(--down)}.fc .side{color:var(--mute)}
   .fc small{color:var(--mute);font-size:12.5px;display:block}
@@ -100,8 +103,11 @@
     </select>
   </div>
   <div class="track" id="track"></div>
+  <div class="note" id="note" hidden>الترشيح إحصائي من المؤشرات (ميل صاعد بثقة متوسطة أو قوية، وRSI تحت 80). مش ضمان إن السهم هيصعد.</div>
   <div class="chips" id="chips" role="group" aria-label="تصفية">
     <button class="chip" data-f="all" aria-pressed="true">الكل</button>
+    <button class="chip" data-f="fav" aria-pressed="false">المفضلة ★</button>
+    <button class="chip" data-f="rise" aria-pressed="false">مرشحة للصعود</button>
     <button class="chip" data-f="vol" aria-pressed="false">اختراق سيولة</button>
     <button class="chip" data-f="up" aria-pressed="false">زخم صاعد</button>
     <button class="chip" data-f="sell" aria-pressed="false">ضغط بيع</button>
@@ -312,12 +318,16 @@ const f2 = n => Number.isFinite(n) ? n.toFixed(2) : '—';
 
 const ARROW = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>';
 
+const FAV_KEY = 'egx_fav_v1';
+const favs = new Set((() => { try { return JSON.parse(localStorage.getItem(FAV_KEY)) || []; } catch (e) { return []; } })());
+function saveFavs() { try { localStorage.setItem(FAV_KEY, JSON.stringify([...favs])); } catch (e) {} }
+
 function buildCard(u) {
   const el = document.createElement('article');
   el.className = 'card';
   el.innerHTML = `
     <div class="head">
-      <div class="px"><div class="price num" data-r="price"></div><div class="chg num" data-r="chg"></div></div>
+      <div class="px"><div class="price num" data-r="price"></div><div class="chg num" data-r="chg"></div><button class="star" data-r="star" aria-pressed="false" aria-label="المفضلة">☆</button></div>
       <div class="id"><span class="badge" data-r="badge"></span><div class="name"></div><div class="meta"></div></div>
     </div>
     <div class="levels">
@@ -346,6 +356,11 @@ function buildCard(u) {
     </div>`;
   el.querySelector('.name').textContent = u[1];
   el.querySelector('.meta').textContent = u[2] ? `${u[2]} • ${u[0]}` : u[0];
+  el.querySelector('.star').addEventListener('click', () => {
+    if (favs.has(u[0])) favs.delete(u[0]); else favs.add(u[0]);
+    saveFavs(); const c = cards.get(u[0]); if (c) paintStar(c, u[0]);
+    if (filter === 'fav' || filter === 'all') render(true);
+  });
   const btn = el.querySelector('.open'), rep = el.querySelector('.report');
   btn.addEventListener('click', () => {
     const open = rep.classList.toggle('show');
@@ -356,6 +371,12 @@ function buildCard(u) {
   return { el, refs, last: {}, open: () => rep.classList.contains('show') };
 }
 function setText(c, k, v) { if (c.last[k] !== v) { c.last[k] = v; c.refs[k].textContent = v; } }
+
+function paintStar(c, t) {
+  const on = favs.has(t);
+  setText(c, 'star', on ? '★' : '☆');
+  const v = String(on); if (c.refs.star.getAttribute('aria-pressed') !== v) c.refs.star.setAttribute('aria-pressed', v);
+}
 
 function paint(u, a) {
   let c = cards.get(u[0]);
@@ -377,6 +398,7 @@ function paint(u, a) {
   { const o = a.outlook, lab = { up: 'ميل صاعد', down: 'ميل هابط', side: 'عرضي' }[o.bias];
     const html = `<b class="${o.bias}">التوقع: ${lab}</b> (ثقة ${o.conf})<small>نطاق الجلسة المعتاد ${f2(o.lo)} إلى ${f2(o.hi)}</small>`;
     if (c.last.fc !== html) { c.last.fc = html; r.fc.innerHTML = html; } }
+  paintStar(c, u[0]);
   setText(c, 'entry', f2(a.p)); setText(c, 'target', f2(a.target)); setText(c, 'stop', f2(a.stop));
   if (c.open()) {
     setText(c, 'rsi', f2(a.rsi)); setText(c, 'macd', f2(a.macd));
@@ -401,6 +423,8 @@ function passes(u, a) {
     if (!(u[0].toLowerCase().includes(q) || u[1].toLowerCase().includes(q))) return false;
   }
   if (filter === 'all') return true;
+  if (filter === 'fav') return favs.has(u[0]);
+  if (filter === 'rise') return a.outlook.bias === 'up' && a.outlook.conf !== 'ضعيفة' && !(a.rsi > 80);
   return a.badge.k === filter || (filter === 'up' && a.badge.k === 'up');
 }
 
@@ -421,13 +445,13 @@ function render(force) {
   if (force || now - lastSort > CONFIG.RESORT_MS) {
     lastSort = now;
     const vis = rows.filter(([u, a]) => passes(u, a));
-    vis.sort((x, y) => sortBy === 'chg' ? y[1].chg - x[1].chg : sortBy === 'vol' ? (y[1].volRatio || 0) - (x[1].volRatio || 0) : y[1].score - x[1].score);
+    vis.sort((x, y) => (filter === 'all' && favs.has(x[0][0]) !== favs.has(y[0][0])) ? (favs.has(y[0][0]) ? 1 : 0) - (favs.has(x[0][0]) ? 1 : 0) : sortBy === 'chg' ? y[1].chg - x[1].chg : sortBy === 'vol' ? (y[1].volRatio || 0) - (x[1].volRatio || 0) : y[1].score - x[1].score);
     order = vis.map(([u]) => u[0]);
     const keep = new Set(order);
     listEl.querySelectorAll('.empty').forEach(n => n.remove());
     for (const [t, c] of cards) if (!keep.has(t) && c.el.parentNode) c.el.remove();
     order.forEach(t => listEl.appendChild(cards.get(t).el));
-    if (!order.length) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = rows.length ? 'مفيش أسهم بتطابق التصفية دلوقتي. جرّب فلتر تاني.' : 'مستني أول بيانات من المصدر.'; listEl.appendChild(d); }
+    if (!order.length) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = rows.length ? (filter === 'fav' ? 'مفيش أسهم في المفضلة. اضغط على النجمة ★ في أي سهم عشان تضيفه.' : 'مفيش أسهم بتطابق التصفية دلوقتي. جرّب فلتر تاني.') : 'مستني أول بيانات من المصدر.'; listEl.appendChild(d); }
   }
 }
 
@@ -501,7 +525,7 @@ $('q').addEventListener('input', e => { query = e.target.value.trim(); render(tr
 $('sort').addEventListener('change', e => { sortBy = e.target.value; render(true); });
 $('chips').addEventListener('click', e => {
   const b = e.target.closest('.chip'); if (!b) return;
-  filter = b.dataset.f;
+  filter = b.dataset.f; $('note').hidden = filter !== 'rise';
   document.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', x === b));
   render(true);
 });
