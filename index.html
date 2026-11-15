@@ -230,6 +230,11 @@ const UNIVERSE = [
   ['DTPP','دلتا للطباعة والتغليف','صناعة',64.6],
   ['AMES','الاسكندرية للخدمات الطبية','رعاية صحية و ادوية',54.96],
   ['AMII','AMII','',10.0],
+  ['CRST','كريست مارك','خدمات مالية',3.0],
+  ['LUTS','LUTS','',10.0],
+  ['VERT','VERT','',10.0],
+  ['TYCN','TYCN','',10.0],
+  ['MEPA','ام بي كو للادوية','رعاية صحية و ادوية',24.48],
 ];
 
 /* ---------------- محرك التحليل الفني ---------------- */
@@ -563,7 +568,18 @@ async function loop() {
   busy = false;
   render(false); setStatus();
 }
+// تحميل كل أسهم البورصة من المصدر وإضافة اللي مش في القائمة اليدوية (بأسمائها الإنجليزية)
+async function loadAll() {
+  try {
+    const r = await fetch(`${CONFIG.API}?all=1`, { cache: 'no-store' });
+    if (!r.ok) return;
+    const j = await r.json();
+    const have = new Set(UNIVERSE.map(u => u[0]));
+    for (const x of j.all || []) if (!have.has(x.t)) UNIVERSE.push([x.t, x.n, '', x.p]);
+  } catch (e) {}
+}
 async function start() {
+  await loadAll();
   try { await fetchQuotes(); state.mode = 'live'; }
   catch (e) { state.mode = 'demo'; demoInit(); demoTick(); }
   render(true); setStatus();
