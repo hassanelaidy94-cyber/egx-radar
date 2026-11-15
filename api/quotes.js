@@ -10,7 +10,8 @@ const UA = 'Mozilla/5.0 (compatible; egx-radar/2.0)';
 const COLS = ['close', 'change', 'volume', 'average_volume_10d_calc', 'RSI', 'EMA10', 'EMA20',
   'MACD.macd', 'MACD.signal', 'ATR', 'update_mode'];
 const TTL = 3000;
-const MAX_SYMBOLS = 100;
+const MAX_SYMBOLS = 400;
+let allCache = { at: 0, body: null };
 
 let cache = { key: '', at: 0, body: null };
 
@@ -56,6 +57,36 @@ module.exports = async (req, res) => {
       if (!r.ok) throw new Error('scanner ' + r.status);
       const j = await r.json();
       return res.end(JSON.stringify({ found: (j.data || []).map(x => ({ s: x.s, d: x.d })) }));
+    } catch (e) {
+      res.statusCode = 502; return res.end(JSON.stringify({ error: String(e.message || e) }));
+    }
+  }
+  // كل أسهم البورصة المصرية:  /api/quotes?all=1
+  if (url.searchParams.get('all')) {
+    if (allCache.body && Date.now() - allCache.at < 3600000) return res.end(allCache.body);
+    try {
+      const r = await fetch(SCAN, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': UA, Origin: 'https://www.tradingview.com' },
+        body: JSON.stringify({
+          columns: ['name', 'description', 'close', 'type'], range: [0, 700],
+          sort: { sortBy: 'volume', sortOrder: 'desc' },
+        }),
+      });
+      if (!r.ok) throw new Error('scanner ' + r.status);
+      const j = await r.json();
+      const all = [];
+      for (const x of j.data || []) {
+        const d = x.d || [];
+        const t = String(x.s || '').split(':')[1];
+        if (String(x.s || '').split(':')[0] !== 'EGX' || d[3] !== 'stock') continue;
+        if (!t || !/^[A-Z0-9]{2,12}$/.test(t) || !(num(d[2]) > 0)) continue;
+        all.push({ t, n: String(d[1] || t), p: r4(num(d[2])) });
+      }
+      if (!all.length) throw new Error('empty list');
+      const body = JSON.stringify({ all });
+      allCache = { at: Date.now(), body };
+      return res.end(body);
     } catch (e) {
       res.statusCode = 502; return res.end(JSON.stringify({ error: String(e.message || e) }));
     }
