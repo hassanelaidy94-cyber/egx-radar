@@ -78,6 +78,14 @@
   .star{background:none;border:0;color:var(--mute);font-size:26px;line-height:1;padding:2px 0;margin-top:2px;cursor:pointer}
   .star[aria-pressed=true]{color:var(--gold)}
   .note{margin-top:8px;font-size:12.5px;color:var(--gold);line-height:1.7}
+  .sig{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--inset);font-size:14px}
+  .sig b{font-size:16px;font-weight:800}
+  .sig small{color:var(--mute);font-size:12.5px;line-height:1.5;text-align:left}
+  .sig.buy{border-color:rgba(61,220,151,.5);background:rgba(61,220,151,.1)} .sig.buy b{color:var(--up)}
+  .sig.sell{border-color:rgba(255,107,129,.5);background:rgba(255,107,129,.1)} .sig.sell b{color:var(--down)}
+  .sig.wait b,.sig.na b{color:var(--mute)}
+  .conds{list-style:none;margin-top:10px;padding:0;font-size:13.5px;line-height:1.9;color:var(--mute)}
+  .conds .ok{color:var(--up)} .conds .no{color:var(--down)}
   .fc{margin-top:12px;font-size:14px;line-height:1.7;color:var(--text)}
   .fc b{font-weight:800}.fc .up{color:var(--up)}.fc .down{color:var(--down)}.fc .side{color:var(--mute)}
   .fc small{color:var(--mute);font-size:12.5px;display:block}
@@ -106,6 +114,8 @@
   <div class="note" id="note" hidden>الترشيح إحصائي من المؤشرات (ميل صاعد بثقة متوسطة أو قوية، وRSI تحت 80). مش ضمان إن السهم هيصعد.</div>
   <div class="chips" id="chips" role="group" aria-label="تصفية">
     <button class="chip" data-f="all" aria-pressed="true">الكل</button>
+    <button class="chip" data-f="sbuy" aria-pressed="false">شراء الآن</button>
+    <button class="chip" data-f="ssell" aria-pressed="false">بيع الآن</button>
     <button class="chip" data-f="fav" aria-pressed="false">المفضلة ★</button>
     <button class="chip" data-f="rise" aria-pressed="false">مرشحة للصعود</button>
     <button class="chip" data-f="vol" aria-pressed="false">اختراق سيولة</button>
@@ -232,7 +242,14 @@ function sessionFraction(now = new Date(), demo = false) {
   if (g('weekday') === 'Fri' || g('weekday') === 'Sat' || mins < 0 || mins > 270) return 1; // السوق مقفول: الحجم يومي كامل
   return Math.max(0.1, mins / 270);
 }
-function analyze(live, frac) {
+function isMarketOpen(now = new Date(), demo = false) {
+  if (demo) return true;
+  const f = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Cairo', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(now);
+  const g = k => f.find(p => p.type === k).value;
+  const m = +g('hour') * 60 + +g('minute');
+  return g('weekday') !== 'Fri' && g('weekday') !== 'Sat' && m >= 600 && m <= 870;
+}
+function analyze(live, frac, open = true) {
   const p = live.p, chg = fin(live.chg) || 0;
   const rsi = fin(live.rsi), ema9 = fin(live.e9), ema21 = fin(live.e21), macd = fin(live.mh), atr = fin(live.atr);
   const volRatio = live.av > 0 ? (live.v / frac) / live.av : NaN;
@@ -275,8 +292,27 @@ function analyze(live, frac) {
   const sh = bias === 'up' ? 0.15 * A : bias === 'down' ? -0.15 * A : 0;
   const outlook = { bias, conf, lo: Math.max(0.01, p - 0.5 * A + sh), hi: p + 0.5 * A + sh,
                     wlo: Math.max(0.01, p - 1.1 * A + sh * 2), whi: p + 1.1 * A + sh * 2 };
+  // إشارة شراء/بيع بقواعد صريحة (مش توصية): الشروط الأساسية 1-3 لازم كلها، ومعاها شرطين على الأقل من 4-6
+  const conds = [
+    { t: 'المتوسط 9 فوق المتوسط 21', ok: ema9 > ema21 },
+    { t: 'MACD إيجابي', ok: macd > 0 },
+    { t: 'RSI بين 45 و72 (مش متشبع)', ok: rsi >= 45 && rsi <= 72 },
+    { t: 'السعر فوق المتوسط 9', ok: p > ema9 },
+    { t: 'السيولة أعلى من المتوسط', ok: volRatio >= 1 },
+    { t: 'مش مطارد صعود حاد (التغير بين -1% و5%)', ok: chg < 5 && chg > -1 },
+  ];
+  const extra = (conds[3].ok ? 1 : 0) + (conds[4].ok ? 1 : 0) + (conds[5].ok ? 1 : 0);
+  const known = [ema9, ema21, macd, rsi].every(Number.isFinite);
+  const when = open ? 'الآن' : '(للجلسة القادمة)';
+  let signal;
+  if (!known) signal = { k: 'na', t: 'بيانات ناقصة', why: '' };
+  else if (conds[0].ok && conds[1].ok && conds[2].ok && extra >= 2) signal = { k: 'buy', t: 'شراء ' + when, why: extra === 3 ? 'كل الشروط متحققة' : 'الشروط الأساسية + ' + extra + ' من 3 داعمة' };
+  else if (rsi >= 80) signal = { k: 'sell', t: 'بيع / خروج ' + when, why: 'تشبع شراء (RSI فوق 80): جني أرباح' };
+  else if (ema9 < ema21 && macd < 0 && p < ema9) signal = { k: 'sell', t: 'بيع / خروج ' + when, why: 'ضعف الزخم: المتوسط 9 تحت 21 وMACD سلبي' };
+  else signal = { k: 'wait', t: 'انتظار', why: 'مفيش إشارة واضحة' };
+  signal.conds = conds;
   return { p, chg, rsi, ema9, ema21, macd, atr, volRatio, score, badge, stop, target,
-           rr: (target - p) / (p - stop), why, vol: live.v, outlook };
+           rr: (target - p) / (p - stop), why, vol: live.v, outlook, signal };
 }
 // ENGINE-END
 
@@ -335,6 +371,7 @@ function buildCard(u) {
       <div class="lv target"><small>الهدف</small><span class="num" data-r="target"></span></div>
       <div class="lv stop"><small>الوقف</small><span class="num" data-r="stop"></span></div>
     </div>
+    <div class="sig" data-r="sigbox"><b data-r="sigt"></b><small data-r="sigw"></small></div>
     <div class="fc" data-r="fc"></div>
     <button class="open" aria-expanded="false"><span>فتح التقرير الفني الكامل</span>${ARROW}</button>
     <div class="report">
@@ -352,6 +389,7 @@ function buildCard(u) {
       </div>
       <svg class="spark" viewBox="0 0 300 56" preserveAspectRatio="none" aria-hidden="true"><polyline data-r="line" fill="none" stroke="var(--cyan)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
       <div class="score"><span>قوة الإشارة</span><div class="bar"><i data-r="bar"></i></div><span class="num" data-r="sc"></span></div>
+      <ul class="conds" data-r="conds"></ul>
       <ul class="why" data-r="why"></ul>
     </div>`;
   el.querySelector('.name').textContent = u[1];
@@ -399,6 +437,8 @@ function paint(u, a) {
     const html = `<b class="${o.bias}">التوقع: ${lab}</b> (ثقة ${o.conf})<small>نطاق الجلسة المعتاد ${f2(o.lo)} إلى ${f2(o.hi)}</small>`;
     if (c.last.fc !== html) { c.last.fc = html; r.fc.innerHTML = html; } }
   paintStar(c, u[0]);
+  { const sg = a.signal; setText(c, 'sigt', sg.t); setText(c, 'sigw', sg.why);
+    const cl = 'sig ' + sg.k; if (r.sigbox.className !== cl) r.sigbox.className = cl; }
   setText(c, 'entry', f2(a.p)); setText(c, 'target', f2(a.target)); setText(c, 'stop', f2(a.stop));
   if (c.open()) {
     setText(c, 'rsi', f2(a.rsi)); setText(c, 'macd', f2(a.macd));
@@ -408,9 +448,13 @@ function paint(u, a) {
     setText(c, 'olw', `${f2(a.outlook.wlo)} - ${f2(a.outlook.whi)}`);
     setText(c, 'sc', a.score + '/100');
     r.bar.style.width = a.score + '%';
-    const s = (state.series[u[0]] || []).slice(-60); if (s.length < 2) return c;
-    const mn = Math.min(...s), mx = Math.max(...s), rg = mx - mn || 1;
-    r.line.setAttribute('points', s.map((y, i) => `${(i / (s.length - 1) * 300).toFixed(1)},${(52 - (y - mn) / rg *48).toFixed(1)}`).join(' '));
+    const s = (state.series[u[0]] || []).slice(-60);
+    if (s.length >= 2) {
+      const mn = Math.min(...s), mx = Math.max(...s), rg = mx - mn || 1;
+      r.line.setAttribute('points', s.map((y, i) => `${(i / (s.length - 1) * 300).toFixed(1)},${(52 - (y - mn) / rg *48).toFixed(1)}`).join(' '));
+    }
+    const cj = a.signal.conds.map(x => (x.ok ? '1' : '0') + x.t).join('|');
+    if (c.last.cj !== cj) { c.last.cj = cj; r.conds.innerHTML = ''; a.signal.conds.forEach(x => { const li = document.createElement('li'); li.className = x.ok ? 'ok' : 'no'; li.textContent = (x.ok ? '✓ ' : '✗ ') + x.t; r.conds.appendChild(li); }); }
     const w = a.why.join('|');
     if (c.last.why !== w) { c.last.why = w; r.why.innerHTML = ''; a.why.forEach(t => { const li = document.createElement('li'); li.textContent = t; r.why.appendChild(li); }); }
   }
@@ -424,17 +468,20 @@ function passes(u, a) {
   }
   if (filter === 'all') return true;
   if (filter === 'fav') return favs.has(u[0]);
+  if (filter === 'sbuy') return a.signal.k === 'buy';
+  if (filter === 'ssell') return a.signal.k === 'sell';
   if (filter === 'rise') return a.outlook.bias === 'up' && a.outlook.conf !== 'ضعيفة' && !(a.rsi > 80);
   return a.badge.k === filter || (filter === 'up' && a.badge.k === 'up');
 }
 
 function render(force) {
   const frac = sessionFraction(new Date(), state.mode === 'demo');
+  const mOpen = isMarketOpen(new Date(), state.mode === 'demo');
   const rows = [];
   for (const u of UNIVERSE) {
     const l = state.live[u[0]];
     if (!l || !(l.p > 0)) continue;
-    const a = analyze(l, frac);
+    const a = analyze(l, frac, mOpen);
     state.res[u[0]] = a;
     const sr = state.series[u[0]] || (state.series[u[0]] = []);
     if (sr[sr.length - 1] !== a.p) { sr.push(a.p); if (sr.length > 90) sr.shift(); }
@@ -525,7 +572,11 @@ $('q').addEventListener('input', e => { query = e.target.value.trim(); render(tr
 $('sort').addEventListener('change', e => { sortBy = e.target.value; render(true); });
 $('chips').addEventListener('click', e => {
   const b = e.target.closest('.chip'); if (!b) return;
-  filter = b.dataset.f; $('note').hidden = filter !== 'rise';
+  filter = b.dataset.f;
+  { const N = { rise: 'الترشيح إحصائي من المؤشرات (ميل صاعد بثقة متوسطة أو قوية، وRSI تحت 80). مش ضمان إن السهم هيصعد.',
+      sbuy: 'إشارة الشراء قواعد فنية بسيطة على بيانات متأخرة، مش توصية. اتأكد من السعر الفعلي في ثاندر وحدّد وقفك قبل الدخول.',
+      ssell: 'إشارة البيع قواعد فنية بسيطة (ضعف زخم أو تشبع شراء)، مش توصية. القرار ليك حسب مركزك وخطتك.' };
+    $('note').hidden = !N[filter]; if (N[filter]) $('note').textContent = N[filter]; }
   document.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', x === b));
   render(true);
 });
