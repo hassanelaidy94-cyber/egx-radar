@@ -524,10 +524,9 @@ function setStatus() {
     bn.hidden = false;
     bn.textContent = 'وضع تجريبي: الأسعار هنا مولّدة عشوائيًا وليست أسعار السوق. اربط التطبيق بالخادم (api/quotes.js) عشان يعرض بيانات حقيقية.';
   } else if (state.mode === 'live') {
-    dot.className = 'dot ' + (state.delayed ? 'delayed' : 'live');
-    st.textContent = (state.delayed ? 'متأخر ' : 'مباشر ') + t;
-    bn.hidden = !state.delayed;
-    if (state.delayed) bn.textContent = 'مصدر البيانات الحالي متأخر عن السوق. للأسعار اللحظية الفعلية استخدم مزوّد بيانات مدفوع.';
+    dot.className = 'dot live';
+    st.textContent = 'مباشر ' + t;
+    bn.hidden = true;
   } else { dot.className = 'dot'; st.textContent = 'جاري الاتصال'; }
 }
 
@@ -599,7 +598,7 @@ $('chips').addEventListener('click', e => {
   const b = e.target.closest('.chip'); if (!b) return;
   filter = b.dataset.f;
   { const N = { rise: 'الترشيح إحصائي من المؤشرات (ميل صاعد بثقة متوسطة أو قوية، وRSI تحت 80). مش ضمان إن السهم هيصعد.',
-      sbuy: 'إشارة الشراء قواعد فنية بسيطة على بيانات متأخرة، مش توصية. اتأكد من السعر الفعلي في ثاندر وحدّد وقفك قبل الدخول.',
+      sbuy: 'إشارة الشراء قواعد فنية بسيطة، مش توصية. اتأكد من السعر الفعلي في ثاندر وحدّد وقفك قبل الدخول.',
       ssell: 'إشارة البيع قواعد فنية بسيطة (ضعف زخم أو تشبع شراء)، مش توصية. القرار ليك حسب مركزك وخطتك.' };
     $('note').hidden = !N[filter]; if (N[filter]) $('note').textContent = N[filter]; }
   document.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', x === b));
