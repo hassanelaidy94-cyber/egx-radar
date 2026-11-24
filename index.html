@@ -673,7 +673,10 @@ function track() {
   const S = { buy: 'إشارة شراء', sell: 'إشارة بيع' };
   let g = '';
   for (const k of ['buy', 'sell']) { const x = (t.sg || {})[k]; if (x && x.n) g += `<div>${S[k]}: نجحت ${pc(x.w, x.n)} • متوسط حركة الجلسة التالية ${(x.sum / x.n).toFixed(2)}%</div>`; }
-  $('trackd').innerHTML = keys.length ? `<details><summary>تفاصيل الدقة</summary>${h}${g}<div class="mute2">الأرقام من استخدامك على الجهاز ده بس، ومحتاجة عدد كبير من التوقعات قبل ما تعتمد عليها. أي نسبة بتحت 33% لتوقع من 3 احتمالات يعني ما أحسنش من التخمين.</div></details>` : '';
+  const body = keys.length ? h + g : '<div>لسه مفيش نتائج مسجلة بالتفصيل. التسجيل بيبدأ بعد إغلاق السوق (2:30 ظهرًا) والتطبيق مفتوح، وبتظهر النتيجة في الجلسة اللي بعدها (بعد 11 صباحًا).</div>';
+  const html = `<summary>تفاصيل الدقة</summary>${body}<div class="mute2">الأرقام من استخدامك على الجهاز ده بس، ومحتاجة عدد كبير من التوقعات قبل ما تعتمد عليها. أي نسبة تحت 33% لتوقع من 3 احتمالات يعني ما أحسنش من التخمين.</div>`;
+  const dt = $('trackd');
+  if (dt.dataset.h !== html) { dt.dataset.h = html; const was = dt.querySelector('details'); const op = was && was.open; dt.innerHTML = '<details' + (op ? ' open' : '') + '>' + html + '</details>'; }
 }
 
 /* ---------------- التشغيل ---------------- */
