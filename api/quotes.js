@@ -9,6 +9,9 @@ const SCAN = 'https://scanner.tradingview.com/egypt/scan';
 const UA = 'Mozilla/5.0 (compatible; egx-radar/2.0)';
 const COLS = ['close', 'change', 'volume', 'average_volume_10d_calc', 'RSI', 'EMA10', 'EMA20',
   'MACD.macd', 'MACD.signal', 'ATR', 'update_mode'];
+const EXT = ['High.1W', 'Low.1W', 'High.1M', 'Low.1M'];
+const WK = ['RSI|1W', 'EMA10|1W', 'EMA20|1W', 'MACD.macd|1W', 'MACD.signal|1W'];
+let level = 2;   // 2: الكل، 1: بدون الأسبوعي، 0: الأساسي فقط
 const TTL = 3000;
 const MAX_SYMBOLS = 400;
 let allCache = { at: 0, body: null };
@@ -31,6 +34,9 @@ function parse(rows) {
       t, p: r4(p), chg: r4(num(d[1])), v: num(d[2]) || 0, av: num(d[3]) || 0,
       rsi: r4(num(d[4])), e9: r4(num(d[5])), e21: r4(num(d[6])),
       mh: macd !== null && sig !== null ? r4(macd - sig) : null, atr: r4(num(d[9])),
+      hw: r4(num(d[11])), lw: r4(num(d[12])), hm: r4(num(d[13])), lm: r4(num(d[14])),
+      wr: r4(num(d[15])), we9: r4(num(d[16])), we21: r4(num(d[17])),
+      wmh: num(d[18]) !== null && num(d[19]) !== null ? r4(num(d[18]) - num(d[19])) : null,
     });
   }
   return { q, delayed: !(q.length && streaming === q.length) };
@@ -97,11 +103,14 @@ module.exports = async (req, res) => {
   const key = syms.join(',');
   if (cache.key === key && Date.now() - cache.at < TTL) return res.end(cache.body);
   try {
-    const r = await fetch(SCAN, {
+    const scan = cols => fetch(SCAN, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'User-Agent': UA, Origin: 'https://www.tradingview.com' },
-      body: JSON.stringify({ symbols: { tickers: syms.map(s => 'EGX:' + s) }, columns: COLS }),
+      body: JSON.stringify({ symbols: { tickers: syms.map(s => 'EGX:' + s) }, columns: cols }),
     });
+    const sets = [COLS, COLS.concat(EXT), COLS.concat(EXT, WK)];
+    let r = await scan(sets[level]);
+    while (!r.ok && level > 0) { level--; r = await scan(sets[level]); }   // لو أعمدة مش مدعومة نرجع خطوة
     if (!r.ok) throw new Error('scanner ' + r.status);
     const j = await r.json();
     const { q, delayed } = parse(j.data);
