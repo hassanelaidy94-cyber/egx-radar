@@ -91,6 +91,15 @@
   .fc small{color:var(--mute);font-size:12.5px;display:block}
   .ol{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
   .track{margin-top:8px;font-size:12.5px;color:var(--mute)}
+  .tb{width:100%;border-collapse:collapse;margin:8px 0}.tb th,.tb td{padding:5px 8px;text-align:right;border-bottom:1px solid var(--line,#22305a)}.mute2{opacity:.8;margin-top:6px}
+  #trackd summary{cursor:pointer;color:var(--gold)}
+  .warnl,.pl{margin:8px 0 0;font-size:13px;line-height:1.7}.warnl{color:var(--gold)}.warnl:empty,.pl:empty{display:none}
+  .pl.up{color:var(--up)}.pl.down{color:var(--down)}
+  .pf{margin-top:12px;padding:10px;border:1px solid #22305a;border-radius:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .pf b{grid-column:1/-1;font-size:13px}.pf label{font-size:12px;color:var(--mute);display:flex;flex-direction:column;gap:3px}
+  .pf input{background:#0b1226;border:1px solid #22305a;border-radius:8px;color:inherit;padding:7px 8px;font:inherit;width:100%;box-sizing:border-box}
+  #mkt,#pfsum{margin-top:8px;font-size:12.5px;color:var(--mute)}#mkt.bad{color:var(--gold)}#mkt:empty,#pfsum:empty{display:none}
+  .toast{position:fixed;left:12px;right:12px;bottom:16px;z-index:50;background:#16224a;border:1px solid var(--gold);border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.7}
   footer{max-width:720px;margin:0 auto;padding:0 18px 28px;font-size:12.5px;color:var(--mute);line-height:1.8;text-align:center}
   @media (prefers-reduced-motion:reduce){.dot.live{animation:none}.price,.bar i,.open svg{transition:none}}
 </style>
@@ -110,13 +119,15 @@
       <option value="vol">الأعلى سيولة</option>
     </select>
   </div>
-  <div class="track" id="track"></div>
+  <div id="mkt"></div><div id="pfsum"></div>
+  <div class="track" id="track"></div><div class="track" id="trackd"></div>
   <div class="note" id="note" hidden>الترشيح إحصائي من المؤشرات (ميل صاعد بثقة متوسطة أو قوية، وRSI تحت 80). مش ضمان إن السهم هيصعد.</div>
   <div class="chips" id="chips" role="group" aria-label="تصفية">
     <button class="chip" data-f="all" aria-pressed="true">الكل</button>
     <button class="chip" data-f="sbuy" aria-pressed="false">شراء الآن</button>
     <button class="chip" data-f="ssell" aria-pressed="false">بيع الآن</button>
     <button class="chip" data-f="fav" aria-pressed="false">المفضلة ★</button>
+    <button class="chip" data-f="pf" aria-pressed="false">محفظتي</button>
     <button class="chip" data-f="rise" aria-pressed="false">مرشحة للصعود</button>
     <button class="chip" data-f="vol" aria-pressed="false">اختراق سيولة</button>
     <button class="chip" data-f="up" aria-pressed="false">زخم صاعد</button>
@@ -326,7 +337,9 @@ function analyze(live, frac, open = true) {
   else signal = { k: 'wait', t: 'انتظار', why: 'مفيش إشارة واضحة' };
   signal.conds = conds;
   return { p, chg, rsi, ema9, ema21, macd, atr, volRatio, score, badge, stop, target,
-           rr: (target - p) / (p - stop), why, vol: live.v, outlook, signal };
+           rr: (target - p) / (p - stop), why, vol: live.v, outlook, signal,
+           hw: live.hw, lw: live.lw, hm: live.hm, lm: live.lm,
+           wtrend: (Number.isFinite(live.we9) && Number.isFinite(live.we21)) ? ((live.we9 > live.we21 && !(live.wmh < 0)) ? 'up' : (live.we9 < live.we21 && !(live.wmh > 0)) ? 'down' : 'mixed') : null, liq: (live.av || 0) * p };
 }
 // ENGINE-END
 
@@ -372,6 +385,24 @@ const FAV_KEY = 'egx_fav_v1';
 const favs = new Set((() => { try { return JSON.parse(localStorage.getItem(FAV_KEY)) || []; } catch (e) { return []; } })());
 function saveFavs() { try { localStorage.setItem(FAV_KEY, JSON.stringify([...favs])); } catch (e) {} }
 
+const PF_KEY = 'egx_pf_v1';
+const pf = (() => { try { return JSON.parse(localStorage.getItem(PF_KEY)) || {}; } catch (e) { return {}; } })();
+function savePf() { try { localStorage.setItem(PF_KEY, JSON.stringify(pf)); } catch (e) {} }
+function askNotify() { try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {} }
+function toast(msg) {
+  const d = document.createElement('div'); d.className = 'toast'; d.setAttribute('role', 'alert'); d.textContent = msg;
+  document.body.appendChild(d); setTimeout(() => d.remove(), 12000); d.addEventListener('click', () => d.remove());
+  try { if ('Notification' in window && Notification.permission === 'granted') new Notification('رادار البورصة', { body: msg }); } catch (e) {}
+}
+function checkAlert(u, p) {
+  const e = pf[u[0]]; if (!e) return;
+  const kind = e.s && p <= e.s ? 's' : e.t && p >= e.t ? 't' : '';
+  if (kind && e.al !== kind) {
+    e.al = kind; savePf();
+    toast(kind === 's' ? `${u[1]} (${u[0]}) وصل ${f2(p)} وده نزل عن وقفك ${f2(e.s)}` : `${u[1]} (${u[0]}) وصل ${f2(p)} وده وصل هدفك ${f2(e.t)}`);
+  } else if (!kind && e.al) { e.al = ''; savePf(); }
+}
+
 function buildCard(u) {
   const el = document.createElement('article');
   el.className = 'card';
@@ -385,7 +416,9 @@ function buildCard(u) {
       <div class="lv target"><small>الهدف</small><span class="num" data-r="target"></span></div>
       <div class="lv stop"><small>الوقف</small><span class="num" data-r="stop"></span></div>
     </div>
+    <div class="pl" data-r="pl"></div>
     <div class="sig" data-r="sigbox"><b data-r="sigt"></b><small data-r="sigw"></small></div>
+    <div class="warnl" data-r="warn"></div>
     <div class="fc" data-r="fc"></div>
     <button class="open" aria-expanded="false"><span>فتح التقرير الفني الكامل</span>${ARROW}</button>
     <div class="report">
@@ -400,6 +433,18 @@ function buildCard(u) {
       <div class="ol">
         <div class="m"><small>نطاق الجلسة المعتاد</small><span class="num" data-r="olr"></span></div>
         <div class="m"><small>نطاق الأسبوع المعتاد</small><span class="num" data-r="olw"></span></div>
+      </div>
+      <div class="ol">
+        <div class="m"><small>أدنى - أعلى الأسبوع (دعم/مقاومة)</small><span class="num" data-r="swk"></span></div>
+        <div class="m"><small>أدنى - أعلى الشهر (دعم/مقاومة)</small><span class="num" data-r="smo"></span></div>
+        <div class="m"><small>الاتجاه الأسبوعي</small><span data-r="wtr"></span></div>
+      </div>
+      <div class="pf">
+        <b>مركزي في السهم (محفوظ على جهازك)</b>
+        <label>الكمية<input data-r="pq" type="number" inputmode="decimal" min="0" step="any"></label>
+        <label>سعر الشراء<input data-r="pc" type="number" inputmode="decimal" min="0" step="any"></label>
+        <label>وقفي<input data-r="ps" type="number" inputmode="decimal" min="0" step="any"></label>
+        <label>هدفي<input data-r="pt" type="number" inputmode="decimal" min="0" step="any"></label>
       </div>
       <svg class="spark" viewBox="0 0 300 56" preserveAspectRatio="none" aria-hidden="true"><polyline data-r="line" fill="none" stroke="var(--cyan)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
       <div class="score"><span>قوة الإشارة</span><div class="bar"><i data-r="bar"></i></div><span class="num" data-r="sc"></span></div>
@@ -420,6 +465,16 @@ function buildCard(u) {
   });
   const refs = {};
   el.querySelectorAll('[data-r]').forEach(n => refs[n.dataset.r] = n);
+  { const e = pf[u[0]] || {};
+    refs.pq.value = e.q ?? ''; refs.pc.value = e.c ?? ''; refs.ps.value = e.s ?? ''; refs.pt.value = e.t ?? '';
+    const save = () => {
+      const g = x => { const v = parseFloat(refs[x].value); return v > 0 ? v : null; };
+      const n = { q: g('pq'), c: g('pc'), s: g('ps'), t: g('pt'), al: '' };
+      if (n.q || n.c || n.s || n.t) pf[u[0]] = n; else delete pf[u[0]];
+      savePf(); if (n.s || n.t) askNotify();
+      render(true);
+    };
+    ['pq', 'pc', 'ps', 'pt'].forEach(x => refs[x].addEventListener('change', save)); }
   return { el, refs, last: {}, open: () => rep.classList.contains('show') };
 }
 function setText(c, k, v) { if (c.last[k] !== v) { c.last[k] = v; c.refs[k].textContent = v; } }
@@ -430,6 +485,7 @@ function paintStar(c, t) {
   const v = String(on); if (c.refs.star.getAttribute('aria-pressed') !== v) c.refs.star.setAttribute('aria-pressed', v);
 }
 
+let mkt = { weak: false };
 function paint(u, a) {
   let c = cards.get(u[0]);
   if (!c) { c = buildCard(u); cards.set(u[0], c); }
@@ -451,6 +507,21 @@ function paint(u, a) {
     const html = `<b class="${o.bias}">التوقع: ${lab}</b> (ثقة ${o.conf})<small>نطاق الجلسة المعتاد ${f2(o.lo)} إلى ${f2(o.hi)}</small>`;
     if (c.last.fc !== html) { c.last.fc = html; r.fc.innerHTML = html; } }
   paintStar(c, u[0]);
+  { const e = pf[u[0]];
+    let t = '', cl = 'pl';
+    if (e && e.q && e.c) { const pl = (a.p - e.c) * e.q, pc = (a.p / e.c - 1) * 100; t = `مركزي: ${pl >= 0 ? 'ربح' : 'خسارة'} ${Math.abs(pl).toFixed(2)} ج (${pc >= 0 ? '+' : '−'}${Math.abs(pc).toFixed(2)}%)`; cl += pl >= 0 ? ' up' : ' down'; }
+    else if (e && e.c) { const pc = (a.p / e.c - 1) * 100; t = `مركزي: ${pc >= 0 ? '+' : '−'}${Math.abs(pc).toFixed(2)}% عن سعر شرائك`; cl += pc >= 0 ? ' up' : ' down'; }
+    if (r.pl.className !== cl) r.pl.className = cl; setText(c, 'pl', t); }
+  { const w = [];
+    if (a.signal.k === 'buy' && a.wtrend === 'down') w.push('الاتجاه الأسبوعي هابط، فالصعود اليومي ضد الاتجاه الأكبر.');
+    if (a.signal.k === 'sell' && a.wtrend === 'up') w.push('الاتجاه الأسبوعي صاعد، فالنزول اليومي ممكن يكون تصحيح.');
+    if (a.signal.k === 'buy' && mkt.weak) w.push('السوق ضعيف النهارده، فإشارات الشراء أقل موثوقية.');
+    if (a.liq > 0 && a.liq < 200000 && state.mode === 'live') w.push('سيولة السهم ضعيفة، والأسعار والمؤشرات ممكن ما تكونش موثوقة.');
+    if (a.hm > a.p && a.p >= a.hm * 0.985) w.push('السعر قريب من أعلى سعر في الشهر (مقاومة).');
+    else if (a.hm > a.p && a.target > a.hm) w.push('الهدف فوق أعلى سعر في الشهر، فممكن ما يتحققش بسهولة.');
+    setText(c, 'warn', w.join(' ')); }
+  { const g = (x, y) => (Number.isFinite(x) && Number.isFinite(y)) ? `${f2(x)} - ${f2(y)}` : '—';
+    if (c.open()) { setText(c, 'swk', g(a.lw, a.hw)); setText(c, 'smo', g(a.lm, a.hm)); setText(c, 'wtr', { up: 'صاعد', down: 'هابط', mixed: 'مختلط', null: '—' }[a.wtrend]); } }
   { const sg = a.signal; setText(c, 'sigt', sg.t); setText(c, 'sigw', sg.why);
     const cl = 'sig ' + sg.k; if (r.sigbox.className !== cl) r.sigbox.className = cl; }
   setText(c, 'entry', f2(a.p)); setText(c, 'target', f2(a.target)); setText(c, 'stop', f2(a.stop));
@@ -475,6 +546,7 @@ function paint(u, a) {
   return c;
 }
 
+function lowLiq(a) { return state.mode === 'live' && a.liq > 0 && a.liq < 200000; }
 function passes(u, a) {
   if (query) {
     const q = query.toLowerCase();
@@ -482,9 +554,10 @@ function passes(u, a) {
   }
   if (filter === 'all') return true;
   if (filter === 'fav') return favs.has(u[0]);
-  if (filter === 'sbuy') return a.signal.k === 'buy';
+  if (filter === 'pf') return !!pf[u[0]];
+  if (filter === 'sbuy') return a.signal.k === 'buy' && !lowLiq(a);
   if (filter === 'ssell') return a.signal.k === 'sell';
-  if (filter === 'rise') return a.outlook.bias === 'up' && a.outlook.conf !== 'ضعيفة' && !(a.rsi > 80);
+  if (filter === 'rise') return !lowLiq(a) && a.outlook.bias === 'up' && a.outlook.conf !== 'ضعيفة' && !(a.rsi > 80);
   return a.badge.k === filter || (filter === 'up' && a.badge.k === 'up');
 }
 
@@ -492,16 +565,24 @@ function render(force) {
   const frac = sessionFraction(new Date(), state.mode === 'demo');
   const mOpen = isMarketOpen(new Date(), state.mode === 'demo');
   const rows = [];
+  { let up = 0, dn = 0;
+    for (const t in state.live) { const c = state.live[t].chg; if (c > 0.005) up++; else if (c < -0.005) dn++; }
+    const tot = up + dn; mkt.weak = state.mode === 'live' && tot >= 20 && up / tot < 0.35;
+    const m = $('mkt'); if (m) { m.textContent = tot ? `السوق: ${up} سهم صاعد و${dn} هابط` + (mkt.weak ? ' (السوق ضعيف، خد حذرك مع إشارات الشراء)' : '') : ''; m.className = mkt.weak ? 'bad' : ''; } }
+  let pCost = 0, pVal = 0;
   for (const u of UNIVERSE) {
     const l = state.live[u[0]];
     if (!l || !(l.p > 0)) continue;
     const a = analyze(l, frac, mOpen);
+    { const e = pf[u[0]]; if (e) { checkAlert(u, a.p); if (e.q && e.c) { pCost += e.q * e.c; pVal += e.q * a.p; } } }
     state.res[u[0]] = a;
     const sr = state.series[u[0]] || (state.series[u[0]] = []);
     if (sr[sr.length - 1] !== a.p) { sr.push(a.p); if (sr.length > 90) sr.shift(); }
     paint(u, a);
     rows.push([u, a]);
   }
+  { const el = $('pfsum'); if (el) { const d = pVal - pCost;
+    el.textContent = pCost > 0 ? `محفظتي: ${d >= 0 ? 'ربح' : 'خسارة'} ${Math.abs(d).toFixed(2)} ج (${d >= 0 ? '+' : '−'}${Math.abs(d / pCost * 100).toFixed(2)}%) على تكلفة ${pCost.toFixed(2)} ج` : ''; } }
   const now = Date.now();
   if (force || now - lastSort > CONFIG.RESORT_MS) {
     lastSort = now;
@@ -512,7 +593,7 @@ function render(force) {
     listEl.querySelectorAll('.empty').forEach(n => n.remove());
     for (const [t, c] of cards) if (!keep.has(t) && c.el.parentNode) c.el.remove();
     order.forEach(t => listEl.appendChild(cards.get(t).el));
-    if (!order.length) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = rows.length ? (filter === 'fav' ? 'مفيش أسهم في المفضلة. اضغط على النجمة ★ في أي سهم عشان تضيفه.' : 'مفيش أسهم بتطابق التصفية دلوقتي. جرّب فلتر تاني.') : 'مستني أول بيانات من المصدر.'; listEl.appendChild(d); }
+    if (!order.length) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = rows.length ? (filter === 'fav' ? 'مفيش أسهم في المفضلة. اضغط على النجمة ★ في أي سهم عشان تضيفه.' : filter === 'pf' ? 'محفظتك فاضية. افتح التقرير الكامل لأي سهم واكتب الكمية وسعر الشراء.' : 'مفيش أسهم بتطابق التصفية دلوقتي. جرّب فلتر تاني.') : 'مستني أول بيانات من المصدر.'; listEl.appendChild(d); }
   }
 }
 
@@ -532,7 +613,7 @@ function setStatus() {
 
 /* ---------------- سجل دقة التوقعات ---------------- */
 const TRK = 'egx_track_v1';
-function trkLoad() { try { const t = JSON.parse(localStorage.getItem(TRK)); if (t && t.open) return t; } catch (e) {} return { open: {}, hit: 0, n: 0 }; }
+function trkLoad() { try { const t = JSON.parse(localStorage.getItem(TRK)); if (t && t.open) return t; } catch (e) {} return { open: {}, hit: 0, n: 0, by: {}, sg: {} }; }
 function trkSave(t) { try { localStorage.setItem(TRK, JSON.stringify(t)); } catch (e) {} }
 function cairoNow() {
   const f = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Cairo', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
@@ -549,9 +630,17 @@ function track() {
         if (o && o.d < c.day && c.mins >= 660) {            // جلسة جديدة بدأت: قيّم التوقع القديم
           const mv = (a.p / o.p - 1) * 100;
           const ok = o.b === 'up' ? mv > 0.3 : o.b === 'down' ? mv < -0.3 : Math.abs(mv) <= 1;
-          t.n++; if (ok) t.hit++; delete t.open[sym];
+          t.n++; if (ok) t.hit++;
+          t.by = t.by || {}; t.sg = t.sg || {};
+          const k = o.b + '|' + (o.c || '?'), r = t.by[k] || (t.by[k] = { n: 0, h: 0 });
+          r.n++; if (ok) r.h++;
+          if (o.s === 'buy' || o.s === 'sell') {
+            const g = t.sg[o.s] || (t.sg[o.s] = { n: 0, w: 0, sum: 0 });
+            g.n++; g.sum += mv; if (o.s === 'buy' ? mv > 0 : mv < 0) g.w++;
+          }
+          delete t.open[sym];
         }
-        if (!t.open[sym] && c.mins >= 870) t.open[sym] = { d: c.day, p: a.p, b: a.outlook.bias }; // بعد الإغلاق: سجّل توقع اليوم التالي
+        if (!t.open[sym] && c.mins >= 870) t.open[sym] = { d: c.day, p: a.p, b: a.outlook.bias, c: a.outlook.conf, s: a.signal.k }; // بعد الإغلاق: سجّل توقع اليوم التالي
       }
       trkSave(t);
     }
@@ -559,6 +648,15 @@ function track() {
   $('track').textContent = t.n > 0
     ? `دقة التوقعات المسجلة: ${t.hit} من ${t.n} (${Math.round(t.hit / t.n * 100)}%)`
     : 'سجل الدقة: التوقعات بتتسجل بعد إغلاق كل جلسة، والنتيجة بتظهر بعد الجلسة اللي بعدها.';
+  const B = { up: 'صعود', down: 'هبوط', side: 'عرضي' }, pc = (h, n) => n ? Math.round(h / n * 100) + '% (' + h + '/' + n + ')' : '—';
+  let h = '<table class="tb"><tr><th>التوقع</th><th>الثقة</th><th>الدقة</th></tr>';
+  const keys = Object.keys(t.by || {}).sort();
+  for (const k of keys) { const [b, c] = k.split('|'); h += `<tr><td>${B[b] || b}</td><td>${c}</td><td>${pc(t.by[k].h, t.by[k].n)}</td></tr>`; }
+  h += '</table>';
+  const S = { buy: 'إشارة شراء', sell: 'إشارة بيع' };
+  let g = '';
+  for (const k of ['buy', 'sell']) { const x = (t.sg || {})[k]; if (x && x.n) g += `<div>${S[k]}: نجحت ${pc(x.w, x.n)} • متوسط حركة الجلسة التالية ${(x.sum / x.n).toFixed(2)}%</div>`; }
+  $('trackd').innerHTML = keys.length ? `<details><summary>تفاصيل الدقة</summary>${h}${g}<div class="mute2">الأرقام من استخدامك على الجهاز ده بس، ومحتاجة عدد كبير من التوقعات قبل ما تعتمد عليها. أي نسبة بتحت 33% لتوقع من 3 احتمالات يعني ما أحسنش من التخمين.</div></details>` : '';
 }
 
 /* ---------------- التشغيل ---------------- */
