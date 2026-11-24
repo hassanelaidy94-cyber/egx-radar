@@ -102,6 +102,9 @@
   .risk{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;text-align:right}.risk label{font-size:12px;display:flex;flex-direction:column;gap:3px}
   .risk input{background:#0b1226;border:1px solid #22305a;border-radius:8px;color:inherit;padding:7px 8px;font:inherit;width:100%;box-sizing:border-box}
   .bk{display:flex;gap:8px;justify-content:center;margin-bottom:12px}.bk button{background:transparent;border:1px solid #22305a;color:var(--gold);border-radius:10px;padding:8px 10px;font:inherit;font-size:12.5px;cursor:pointer}
+  #pfsum.wealth{margin:14px 0 6px;padding:18px 12px;text-align:center;background:var(--card);border:1px solid #22305a;border-radius:16px;color:inherit}
+  .wealth .wl{font-size:14px;color:var(--mute)}.wealth .wv{font-size:44px;font-weight:700;line-height:1.3;margin:4px 0}
+  .wealth .wd{font-size:17px;direction:ltr}.wealth .wd.up{color:var(--up)}.wealth .wd.down{color:var(--down)}.wealth .wc{margin-top:6px;font-size:12.5px;color:var(--mute)}
   .toast{position:fixed;left:12px;right:12px;bottom:16px;z-index:50;background:#16224a;border:1px solid var(--gold);border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.7}
   footer{max-width:720px;margin:0 auto;padding:0 18px 28px;font-size:12.5px;color:var(--mute);line-height:1.8;text-align:center}
   @media (prefers-reduced-motion:reduce){.dot.live{animation:none}.price,.bar i,.open svg{transition:none}}
@@ -597,8 +600,16 @@ function render(force) {
     paint(u, a);
     rows.push([u, a]);
   }
-  { const el = $('pfsum'); if (el) { const d = pVal - pCost;
-    el.textContent = pCost > 0 ? `محفظتي: ${d >= 0 ? 'ربح' : 'خسارة'} ${Math.abs(d).toFixed(2)} ج (${d >= 0 ? '+' : '−'}${Math.abs(d / pCost * 100).toFixed(2)}%) على تكلفة ${pCost.toFixed(2)} ج` : ''; } }
+  { const el = $('pfsum'); if (el) {
+    const d = pVal - pCost, up = d >= 0, pc = pCost > 0 ? Math.abs(d / pCost * 100).toFixed(2) : '0.00';
+    const fmt = n => Math.round(n).toLocaleString('en-US');
+    let html = '';
+    if (pCost > 0) {
+      if (filter === 'pf') html = `<div class="wl">قيمة محفظتي (ج.م)</div><div class="wv num">${fmt(pVal)}</div><div class="wd num ${up ? 'up' : 'down'}">${up ? '+' : '−'}${fmt(Math.abs(d))} <span>${up ? '▲' : '▼'} ${pc}%</span></div><div class="wc">التكلفة ${fmt(pCost)} ج.م</div>`;
+      else html = `محفظتي: ${up ? 'ربح' : 'خسارة'} ${Math.abs(d).toFixed(2)} ج (${up ? '+' : '−'}${pc}%) على تكلفة ${pCost.toFixed(2)} ج`;
+    }
+    el.className = filter === 'pf' && pCost > 0 ? 'wealth' : '';
+    if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; } } }
   const now = Date.now();
   if (force || now - lastSort > CONFIG.RESORT_MS) {
     lastSort = now;
