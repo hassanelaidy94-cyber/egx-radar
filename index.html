@@ -99,6 +99,9 @@
   .pf b{grid-column:1/-1;font-size:13px}.pf label{font-size:12px;color:var(--mute);display:flex;flex-direction:column;gap:3px}
   .pf input{background:#0b1226;border:1px solid #22305a;border-radius:8px;color:inherit;padding:7px 8px;font:inherit;width:100%;box-sizing:border-box}
   #mkt,#pfsum{margin-top:8px;font-size:12.5px;color:var(--mute)}#mkt.bad{color:var(--gold)}#mkt:empty,#pfsum:empty{display:none}
+  .risk{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;text-align:right}.risk label{font-size:12px;display:flex;flex-direction:column;gap:3px}
+  .risk input{background:#0b1226;border:1px solid #22305a;border-radius:8px;color:inherit;padding:7px 8px;font:inherit;width:100%;box-sizing:border-box}
+  .bk{display:flex;gap:8px;justify-content:center;margin-bottom:12px}.bk button{background:transparent;border:1px solid #22305a;color:var(--gold);border-radius:10px;padding:8px 10px;font:inherit;font-size:12.5px;cursor:pointer}
   .toast{position:fixed;left:12px;right:12px;bottom:16px;z-index:50;background:#16224a;border:1px solid var(--gold);border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.7}
   footer{max-width:720px;margin:0 auto;padding:0 18px 28px;font-size:12.5px;color:var(--mute);line-height:1.8;text-align:center}
   @media (prefers-reduced-motion:reduce){.dot.live{animation:none}.price,.bar i,.open svg{transition:none}}
@@ -117,6 +120,8 @@
       <option value="score">الأقوى تحليلًا</option>
       <option value="chg">الأعلى ارتفاعًا</option>
       <option value="vol">الأعلى سيولة</option>
+      <option value="pl">محفظتي: الأكبر خسارة أولًا</option>
+      <option value="plw">محفظتي: الأكبر ربحًا أولًا</option>
     </select>
   </div>
   <div id="mkt"></div><div id="pfsum"></div>
@@ -135,7 +140,12 @@
   </div>
 </header>
 <main id="list"></main>
-<footer>تحليل آلي للمعلومات فقط، وليس توصية بيع أو شراء. الأسعار قد تتأخر حسب مصدر البيانات.</footer>
+<footer>
+  <div class="risk"><label>رأس المال (ج)<input id="cap" type="number" inputmode="decimal" min="0" step="any"></label>
+  <label>المخاطرة لكل صفقة (%)<input id="rk" type="number" inputmode="decimal" min="0" max="100" step="any"></label></div>
+  <div class="bk"><button id="bkx" type="button">نسخ احتياطي لمفضلتي ومحفظتي</button><button id="bki" type="button">استرجاع نسخة</button></div>
+  تحليل آلي للمعلومات فقط، وليس توصية بيع أو شراء. الأسعار قد تتأخر حسب مصدر البيانات.
+</footer>
 
 <script>
 /* ---------------- الإعدادات ---------------- */
@@ -385,6 +395,8 @@ const FAV_KEY = 'egx_fav_v1';
 const favs = new Set((() => { try { return JSON.parse(localStorage.getItem(FAV_KEY)) || []; } catch (e) { return []; } })());
 function saveFavs() { try { localStorage.setItem(FAV_KEY, JSON.stringify([...favs])); } catch (e) {} }
 
+const RK_KEY = 'egx_risk_v1';
+const risk = (() => { try { return Object.assign({ cap: 0, rk: 1 }, JSON.parse(localStorage.getItem(RK_KEY)) || {}); } catch (e) { return { cap: 0, rk: 1 }; } })();
 const PF_KEY = 'egx_pf_v1';
 const pf = (() => { try { return JSON.parse(localStorage.getItem(PF_KEY)) || {}; } catch (e) { return {}; } })();
 function savePf() { try { localStorage.setItem(PF_KEY, JSON.stringify(pf)); } catch (e) {} }
@@ -438,6 +450,7 @@ function buildCard(u) {
         <div class="m"><small>أدنى - أعلى الأسبوع (دعم/مقاومة)</small><span class="num" data-r="swk"></span></div>
         <div class="m"><small>أدنى - أعلى الشهر (دعم/مقاومة)</small><span class="num" data-r="smo"></span></div>
         <div class="m"><small>الاتجاه الأسبوعي</small><span data-r="wtr"></span></div>
+        <div class="m"><small>كمية تناسب مخاطرتك</small><span class="num" data-r="qty"></span></div>
       </div>
       <div class="pf">
         <b>مركزي في السهم (محفوظ على جهازك)</b>
@@ -521,7 +534,9 @@ function paint(u, a) {
     else if (a.hm > a.p && a.target > a.hm) w.push('الهدف فوق أعلى سعر في الشهر، فممكن ما يتحققش بسهولة.');
     setText(c, 'warn', w.join(' ')); }
   { const g = (x, y) => (Number.isFinite(x) && Number.isFinite(y)) ? `${f2(x)} - ${f2(y)}` : '—';
-    if (c.open()) { setText(c, 'swk', g(a.lw, a.hw)); setText(c, 'smo', g(a.lm, a.hm)); setText(c, 'wtr', { up: 'صاعد', down: 'هابط', mixed: 'مختلط', null: '—' }[a.wtrend]); } }
+    if (c.open()) { setText(c, 'swk', g(a.lw, a.hw)); setText(c, 'smo', g(a.lm, a.hm)); { const d = a.p - a.stop, q = risk.cap > 0 && risk.rk > 0 && d > 0 ? Math.floor(risk.cap * risk.rk / 100 / d) : null;
+      setText(c, 'qty', q === null ? 'اكتب رأس مالك أسفل الصفحة' : q + ' سهم'); }
+    setText(c, 'wtr', { up: 'صاعد', down: 'هابط', mixed: 'مختلط', null: '—' }[a.wtrend]); } }
   { const sg = a.signal; setText(c, 'sigt', sg.t); setText(c, 'sigw', sg.why);
     const cl = 'sig ' + sg.k; if (r.sigbox.className !== cl) r.sigbox.className = cl; }
   setText(c, 'entry', f2(a.p)); setText(c, 'target', f2(a.target)); setText(c, 'stop', f2(a.stop));
@@ -546,6 +561,7 @@ function paint(u, a) {
   return c;
 }
 
+function plPct(t, a) { const e = pf[t]; return e && e.c ? (a.p / e.c - 1) * 100 : (sortBy === 'pl' ? 1e9 : -1e9); }
 function lowLiq(a) { return state.mode === 'live' && a.liq > 0 && a.liq < 200000; }
 function passes(u, a) {
   if (query) {
@@ -568,7 +584,7 @@ function render(force) {
   { let up = 0, dn = 0;
     for (const t in state.live) { const c = state.live[t].chg; if (c > 0.005) up++; else if (c < -0.005) dn++; }
     const tot = up + dn; mkt.weak = state.mode === 'live' && tot >= 20 && up / tot < 0.35;
-    const m = $('mkt'); if (m) { m.textContent = tot ? `السوق: ${up} سهم صاعد و${dn} هابط` + (mkt.weak ? ' (السوق ضعيف، خد حذرك مع إشارات الشراء)' : '') : ''; m.className = mkt.weak ? 'bad' : ''; } }
+    const m = $('mkt'); if (m) { m.textContent = tot ? `السوق: ${up} صاعد • ${dn} هابط` + (mkt.weak ? ' (السوق ضعيف، خد حذرك مع إشارات الشراء)' : '') : ''; m.className = mkt.weak ? 'bad' : ''; } }
   let pCost = 0, pVal = 0;
   for (const u of UNIVERSE) {
     const l = state.live[u[0]];
@@ -587,7 +603,8 @@ function render(force) {
   if (force || now - lastSort > CONFIG.RESORT_MS) {
     lastSort = now;
     const vis = rows.filter(([u, a]) => passes(u, a));
-    vis.sort((x, y) => (filter === 'all' && favs.has(x[0][0]) !== favs.has(y[0][0])) ? (favs.has(y[0][0]) ? 1 : 0) - (favs.has(x[0][0]) ? 1 : 0) : sortBy === 'chg' ? y[1].chg - x[1].chg : sortBy === 'vol' ? (y[1].volRatio || 0) - (x[1].volRatio || 0) : y[1].score - x[1].score);
+    vis.sort((x, y) => (filter === 'all' && favs.has(x[0][0]) !== favs.has(y[0][0])) ? (favs.has(y[0][0]) ? 1 : 0) - (favs.has(x[0][0]) ? 1 : 0) : sortBy === 'pl' || sortBy === 'plw' ? (plPct(x[0][0], x[1]) - plPct(y[0][0], y[1])) * (sortBy === 'pl' ? 1 : -1) :
+      sortBy === 'chg' ? y[1].chg - x[1].chg : sortBy === 'vol' ? (y[1].volRatio || 0) - (x[1].volRatio || 0) : y[1].score - x[1].score);
     order = vis.map(([u]) => u[0]);
     const keep = new Set(order);
     listEl.querySelectorAll('.empty').forEach(n => n.remove());
@@ -690,6 +707,27 @@ async function start() {
   setInterval(loop, CONFIG.POLL_MS);
   track(); setInterval(track, 30000);
 }
+$('cap').value = risk.cap || ''; $('rk').value = risk.rk || '';
+['cap', 'rk'].forEach(id => $(id).addEventListener('change', () => {
+  risk.cap = parseFloat($('cap').value) || 0; risk.rk = parseFloat($('rk').value) || 0;
+  try { localStorage.setItem(RK_KEY, JSON.stringify(risk)); } catch (e) {}
+  for (const c of cards.values()) c.last.qty = undefined; render(true);
+}));
+$('bkx').addEventListener('click', async () => {
+  const txt = JSON.stringify({ v: 1, favs: [...favs], pf, risk });
+  try { await navigator.clipboard.writeText(txt); toast('اتنسخت النسخة الاحتياطية. الصقها في ملاحظات أو رسالة لنفسك.'); }
+  catch (e) { prompt('انسخ النص ده واحتفظ بيه:', txt); }
+});
+$('bki').addEventListener('click', () => {
+  const t = prompt('الصق النسخة الاحتياطية هنا:'); if (!t) return;
+  try {
+    const j = JSON.parse(t); if (!j || j.v !== 1) throw 0;
+    favs.clear(); (j.favs || []).forEach(x => favs.add(String(x))); saveFavs();
+    for (const k of Object.keys(pf)) delete pf[k]; Object.assign(pf, j.pf || {}); savePf();
+    Object.assign(risk, j.risk || {}); try { localStorage.setItem(RK_KEY, JSON.stringify(risk)); } catch (e) {}
+    toast('اترجعت النسخة. هتظهر في الكروت بعد تحديث الصفحة.');
+  } catch (e) { toast('النص ده مش نسخة احتياطية صحيحة.'); }
+});
 $('q').addEventListener('input', e => { query = e.target.value.trim(); render(true); });
 $('sort').addEventListener('change', e => { sortBy = e.target.value; render(true); });
 $('chips').addEventListener('click', e => {
