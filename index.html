@@ -597,8 +597,8 @@ function render(force) {
     state.res[u[0]] = a;
     const sr = state.series[u[0]] || (state.series[u[0]] = []);
     if (sr[sr.length - 1] !== a.p) { sr.push(a.p); if (sr.length > 90) sr.shift(); }
-    paint(u, a);
     rows.push([u, a]);
+    if (passes(u, a)) paint(u, a);
   }
   { const el = $('pfsum'); if (el) {
     const d = pVal - pCost, up = d >= 0, pc = pCost > 0 ? Math.abs(d / pCost * 100).toFixed(2) : '0.00';
@@ -633,9 +633,10 @@ function setStatus() {
     bn.hidden = false;
     bn.textContent = 'وضع تجريبي: الأسعار هنا مولّدة عشوائيًا وليست أسعار السوق. اربط التطبيق بالخادم (api/quotes.js) عشان يعرض بيانات حقيقية.';
   } else if (state.mode === 'live') {
-    dot.className = 'dot live';
-    st.textContent = 'مباشر ' + t;
-    bn.hidden = true;
+    if ((state.fail || 0) >= 3) {
+      dot.className = 'dot delayed'; st.textContent = 'انقطع الاتصال، آخر تحديث ' + t;
+      bn.hidden = false; bn.textContent = 'مش قادر أوصل للسيرفر. الأسعار المعروضة هي آخر ما اتحدث، فما تعتمدش عليها لحد ما الاتصال يرجع.';
+    } else { dot.className = 'dot live'; st.textContent = 'مباشر ' + t; bn.hidden = true; }
   } else { dot.className = 'dot'; st.textContent = 'جاري الاتصال'; }
 }
 
@@ -702,17 +703,31 @@ function track() {
 
 /* ---------------- التشغيل ---------------- */
 let busy = false;
+let lastRetry = 0;
 async function loop() {
   if (busy) return; busy = true;
   try {
-    if (state.mode === 'demo') demoTick();
-    else { await fetchQuotes(); state.mode = 'live'; }
+    if (state.mode === 'demo') {
+      demoTick();
+      if (Date.now() - lastRetry > 15000) {            // لو السيرفر رجع، نتحول للبيانات الحقيقية من غير ريفريش
+        lastRetry = Date.now();
+        const keep = state.live; state.live = {};
+        try { await fetchQuotes(); state.mode = 'live'; state.series = {}; state.fail = 0; } catch (e) { state.live = keep; }
+      }
+    } else { await fetchQuotes(); state.mode = 'live'; state.fail = 0; }
   } catch (e) {
+    state.fail = (state.fail || 0) + 1;
     if (state.mode !== 'live') { state.mode = 'demo'; demoInit(); }
   }
   busy = false;
   render(false); setStatus();
 }
+function schedule() {
+  const open = isMarketOpen(new Date(), state.mode === 'demo');
+  const d = document.hidden ? 30000 : open ? CONFIG.POLL_MS : 20000;   // أبطأ لما السوق مقفول أو الصفحة مش قدامك
+  setTimeout(async () => { await loop(); schedule(); }, d);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loop(); });
 // تحميل كل أسهم البورصة من المصدر وإضافة اللي مش في القائمة اليدوية (بأسمائها الإنجليزية)
 async function loadAll() {
   try {
@@ -728,7 +743,7 @@ async function start() {
   try { await fetchQuotes(); state.mode = 'live'; }
   catch (e) { state.mode = 'demo'; demoInit(); demoTick(); }
   render(true); setStatus();
-  setInterval(loop, CONFIG.POLL_MS);
+  schedule();
   track(); setInterval(track, 30000);
 }
 $('cap').value = risk.cap || ''; $('rk').value = risk.rk || '';
