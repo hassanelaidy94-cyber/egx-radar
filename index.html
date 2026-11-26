@@ -146,7 +146,7 @@
 <footer>
   <div class="risk"><label>رأس المال (ج)<input id="cap" type="number" inputmode="decimal" min="0" step="any"></label>
   <label>المخاطرة لكل صفقة (%)<input id="rk" type="number" inputmode="decimal" min="0" max="100" step="any"></label></div>
-  <div class="bk"><button id="bkx" type="button">نسخ احتياطي لمفضلتي ومحفظتي</button><button id="bki" type="button">استرجاع نسخة</button></div>
+  <div class="bk"><button id="bkx" type="button">نسخ احتياطي لمفضلتي ومحفظتي</button><button id="bki" type="button">استرجاع نسخة</button><button id="bke" type="button">تصدير بيانات التتبع</button></div>
   تحليل آلي للمعلومات فقط، وليس توصية بيع أو شراء. الأسعار قد تتأخر حسب مصدر البيانات.
 </footer>
 
@@ -520,7 +520,7 @@ function paint(u, a) {
   if (c.last.bk !== a.badge.k) { c.last.bk = a.badge.k; r.badge.className = 'badge' + (a.badge.k === 'sell' ? ' sell' : a.badge.k === 'none' ? ' none' : ''); }
   setText(c, 'badge', (a.badge.k === 'none' ? '' : '⚡ ') + a.badge.t);
   { const o = a.outlook, lab = { up: 'ميل صاعد', down: 'ميل هابط', side: 'عرضي' }[o.bias];
-    const html = `<b class="${o.bias}">التوقع: ${lab}</b> (ثقة ${o.conf})<small>نطاق الجلسة المعتاد ${f2(o.lo)} إلى ${f2(o.hi)}</small>`;
+    const html = `<b class="${o.bias}">التوقع: ${lab}</b> (اتفاق المؤشرات: ${o.conf})<small>نطاق الجلسة المعتاد ${f2(o.lo)} إلى ${f2(o.hi)}</small>`;
     if (c.last.fc !== html) { c.last.fc = html; r.fc.innerHTML = html; } }
   paintStar(c, u[0]);
   { const e = pf[u[0]];
@@ -640,14 +640,17 @@ function setStatus() {
 }
 
 /* ---------------- سجل دقة التوقعات ---------------- */
-const TRK = 'egx_track_v1';
-function trkLoad() { try { const t = JSON.parse(localStorage.getItem(TRK)); if (t && t.open) return t; } catch (e) {} return { open: {}, hit: 0, n: 0, by: {}, sg: {} }; }
-function trkSave(t) { try { localStorage.setItem(TRK, JSON.stringify(t)); } catch (e) {} }
+// الإصدار 2: شرط العرضي أضيق (0.5%) + بيسجل مؤشرات كل توقع عشان نحلل بعدين إيه اللي بيفرق فعلًا
+const TRK = 'egx_track_v2', SIDE = 0.5, LOG_MAX = 6000;
+function trkLoad() { try { const t = JSON.parse(localStorage.getItem(TRK)); if (t && t.open) return t; } catch (e) {} return { open: {}, hit: 0, n: 0, by: {}, sg: {}, base: { n: 0, side: 0, up: 0, down: 0 }, log: [] }; }
+let trkDirty = false;
+function trkSave(t) { if (!trkDirty) return; trkDirty = false; try { localStorage.setItem(TRK, JSON.stringify(t)); } catch (e) {} }
 function cairoNow() {
   const f = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Cairo', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
   const g = k => f.find(p => p.type === k).value;
   return { day: `${g('year')}-${g('month')}-${g('day')}`, wd: g('weekday'), mins: +g('hour') * 60 + +g('minute') };
 }
+const r2 = x => Number.isFinite(x) ? Math.round(x * 100) / 100 : null;
 function track() {
   const t = trkLoad();
   if (state.mode === 'live') {
@@ -657,18 +660,23 @@ function track() {
         const a = state.res[sym], o = t.open[sym];
         if (o && o.d < c.day && c.mins >= 660) {            // جلسة جديدة بدأت: قيّم التوقع القديم
           const mv = (a.p / o.p - 1) * 100;
-          const ok = o.b === 'up' ? mv > 0.3 : o.b === 'down' ? mv < -0.3 : Math.abs(mv) <= 1;
+          const ok = o.b === 'up' ? mv > 0.3 : o.b === 'down' ? mv < -0.3 : Math.abs(mv) <= SIDE;
           t.n++; if (ok) t.hit++;
-          t.by = t.by || {}; t.sg = t.sg || {};
-          const k = o.b + '|' + (o.c || '?'), r = t.by[k] || (t.by[k] = { n: 0, h: 0 });
-          r.n++; if (ok) r.h++;
+          const k = o.b + '|' + (o.c || '?'), r = t.by[k] || (t.by[k] = { n: 0, h: 0, sum: 0 });
+          r.n++; r.sum = (r.sum || 0) + mv; if (ok) r.h++;
+          const B = t.base; B.n++; if (Math.abs(mv) <= SIDE) B.side++; if (mv > 0.3) B.up++; if (mv < -0.3) B.down++;
           if (o.s === 'buy' || o.s === 'sell') {
             const g = t.sg[o.s] || (t.sg[o.s] = { n: 0, w: 0, sum: 0 });
             g.n++; g.sum += mv; if (o.s === 'buy' ? mv > 0 : mv < 0) g.w++;
           }
-          delete t.open[sym];
+          t.log.push({ s: sym, d: o.d, b: o.b, c: o.c, k: o.s, p: o.p, r: o.r, v: o.v, sc: o.sc, w: o.w, ch: o.ch, mv: r2(mv) });
+          if (t.log.length > LOG_MAX) t.log.splice(0, t.log.length - LOG_MAX);
+          delete t.open[sym]; trkDirty = true;
         }
-        if (!t.open[sym] && c.mins >= 870) t.open[sym] = { d: c.day, p: a.p, b: a.outlook.bias, c: a.outlook.conf, s: a.signal.k }; // بعد الإغلاق: سجّل توقع اليوم التالي
+        if (!t.open[sym] && c.mins >= 870) {                  // بعد الإغلاق: سجّل توقع اليوم التالي ومؤشراته
+          t.open[sym] = { d: c.day, p: a.p, b: a.outlook.bias, c: a.outlook.conf, s: a.signal.k, r: r2(a.rsi), v: r2(a.volRatio), sc: a.score, w: a.wtrend, ch: r2(a.chg) };
+          trkDirty = true;
+        }
       }
       trkSave(t);
     }
@@ -677,15 +685,17 @@ function track() {
     ? `دقة التوقعات المسجلة: ${t.hit} من ${t.n} (${Math.round(t.hit / t.n * 100)}%)`
     : 'سجل الدقة: التوقعات بتتسجل بعد إغلاق كل جلسة، والنتيجة بتظهر بعد الجلسة اللي بعدها.';
   const B = { up: 'صعود', down: 'هبوط', side: 'عرضي' }, pc = (h, n) => n ? Math.round(h / n * 100) + '% (' + h + '/' + n + ')' : '—';
-  let h = '<table class="tb"><tr><th>التوقع</th><th>الثقة</th><th>الدقة</th></tr>';
+  let h = '<table class="tb"><tr><th>التوقع</th><th>اتفاق المؤشرات</th><th>الدقة</th><th>متوسط الحركة</th></tr>';
   const keys = Object.keys(t.by || {}).sort();
-  for (const k of keys) { const [b, c] = k.split('|'); h += `<tr><td>${B[b] || b}</td><td>${c}</td><td>${pc(t.by[k].h, t.by[k].n)}</td></tr>`; }
+  for (const k of keys) { const [b, c] = k.split('|'), x = t.by[k]; h += `<tr><td>${B[b] || b}</td><td>${c}</td><td>${pc(x.h, x.n)}</td><td>${x.n && x.sum !== undefined ? (x.sum / x.n).toFixed(2) + '%' : '—'}</td></tr>`; }
   h += '</table>';
   const S = { buy: 'إشارة شراء', sell: 'إشارة بيع' };
   let g = '';
+  const bs = t.base;
+  if (bs && bs.n > 0) g += `<div><b>خط الأساس</b> (بدون أي تحليل): لو قلنا «عرضي» لكل الأسهم كانت الدقة ${Math.round(bs.side / bs.n * 100)}%، و«صعود» ${Math.round(bs.up / bs.n * 100)}%، و«هبوط» ${Math.round(bs.down / bs.n * 100)}%. أي توقع لازم يعدّي نسبته عشان نقول إن التحليل بيضيف حاجة.</div>`;
   for (const k of ['buy', 'sell']) { const x = (t.sg || {})[k]; if (x && x.n) g += `<div>${S[k]}: نجحت ${pc(x.w, x.n)} • متوسط حركة الجلسة التالية ${(x.sum / x.n).toFixed(2)}%</div>`; }
   const body = keys.length ? h + g : '<div>لسه مفيش نتائج مسجلة بالتفصيل. التسجيل بيبدأ بعد إغلاق السوق (2:30 ظهرًا) والتطبيق مفتوح، وبتظهر النتيجة في الجلسة اللي بعدها (بعد 11 صباحًا).</div>';
-  const html = `<summary>تفاصيل الدقة</summary>${body}<div class="mute2">الأرقام من استخدامك على الجهاز ده بس، ومحتاجة عدد كبير من التوقعات قبل ما تعتمد عليها. أي نسبة تحت 33% لتوقع من 3 احتمالات يعني ما أحسنش من التخمين.</div>`;
+  const html = `<summary>تفاصيل الدقة (${(t.log || []).length} توقع مسجل)</summary>${body}<div class="mute2">العرضي = السهم اتحرك أقل من ${SIDE}%. الأرقام من جهازك بس، ومحتاجة أسابيع قبل ما نحكم. اتفاق المؤشرات معناه إن المؤشرات متفقة مع بعض، مش ضمان للدقة.</div>`;
   const dt = $('trackd');
   if (dt.dataset.h !== html) { dt.dataset.h = html; const was = dt.querySelector('details'); const op = was && was.open; dt.innerHTML = '<details' + (op ? ' open' : '') + '>' + html + '</details>'; }
 }
@@ -731,6 +741,11 @@ $('bkx').addEventListener('click', async () => {
   const txt = JSON.stringify({ v: 1, favs: [...favs], pf, risk });
   try { await navigator.clipboard.writeText(txt); toast('اتنسخت النسخة الاحتياطية. الصقها في ملاحظات أو رسالة لنفسك.'); }
   catch (e) { prompt('انسخ النص ده واحتفظ بيه:', txt); }
+});
+$('bke').addEventListener('click', async () => {
+  const t = trkLoad(), txt = JSON.stringify({ v: 2, log: t.log, base: t.base, by: t.by, sg: t.sg });
+  try { await navigator.clipboard.writeText(txt); toast('اتنسخت بيانات التتبع (' + t.log.length + ' توقع). الصقها في رسالة وابعتها.'); }
+  catch (e) { prompt('انسخ النص ده:', txt); }
 });
 $('bki').addEventListener('click', () => {
   const t = prompt('الصق النسخة الاحتياطية هنا:'); if (!t) return;
