@@ -694,8 +694,8 @@ function track() {
   const bs = t.base;
   if (bs && bs.n > 0) g += `<div><b>خط الأساس</b> (بدون أي تحليل): لو قلنا «عرضي» لكل الأسهم كانت الدقة ${Math.round(bs.side / bs.n * 100)}%، و«صعود» ${Math.round(bs.up / bs.n * 100)}%، و«هبوط» ${Math.round(bs.down / bs.n * 100)}%. أي توقع لازم يعدّي نسبته عشان نقول إن التحليل بيضيف حاجة.</div>`;
   for (const k of ['buy', 'sell']) { const x = (t.sg || {})[k]; if (x && x.n) g += `<div>${S[k]}: نجحت ${pc(x.w, x.n)} • متوسط حركة الجلسة التالية ${(x.sum / x.n).toFixed(2)}%</div>`; }
-  const body = keys.length ? h + g : '<div>لسه مفيش نتائج مسجلة بالتفصيل. التسجيل بيبدأ بعد إغلاق السوق (2:30 ظهرًا) والتطبيق مفتوح، وبتظهر النتيجة في الجلسة اللي بعدها (بعد 11 صباحًا).</div>';
-  const html = `<summary>تفاصيل الدقة (${(t.log || []).length} توقع مسجل)</summary>${body}<div class="mute2">العرضي = السهم اتحرك أقل من ${SIDE}%. الأرقام من جهازك بس، ومحتاجة أسابيع قبل ما نحكم. اتفاق المؤشرات معناه إن المؤشرات متفقة مع بعض، مش ضمان للدقة.</div>`;
+  const body = keys.length ? h + g : (Object.keys(t.open || {}).length ? '<div>التوقعات اتسجلت وبتستنى الجلسة الجاية. أول نتايج هتظهر بعد 11 صباح الأحد والتطبيق مفتوح.</div>' : '<div>لسه مفيش توقعات مسجلة. التسجيل بيبدأ بعد إغلاق السوق (2:30 ظهرًا) والتطبيق مفتوح.</div>');
+  const html = `<summary>تفاصيل الدقة (${(t.log || []).length} نتيجة، ${Object.keys(t.open || {}).length} توقع بانتظار الجلسة الجاية)</summary>${body}<div class="mute2">العرضي = السهم اتحرك أقل من ${SIDE}%. الأرقام من جهازك بس، ومحتاجة أسابيع قبل ما نحكم. اتفاق المؤشرات معناه إن المؤشرات متفقة مع بعض، مش ضمان للدقة.</div>`;
   const dt = $('trackd');
   if (dt.dataset.h !== html) { dt.dataset.h = html; const was = dt.querySelector('details'); const op = was && was.open; dt.innerHTML = '<details' + (op ? ' open' : '') + '>' + html + '</details>'; }
 }
