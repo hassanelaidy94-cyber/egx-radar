@@ -41,10 +41,12 @@
   .chip{flex:0 0 auto;border:1px solid var(--line);background:transparent;color:var(--mute);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;cursor:pointer}
   .chip[aria-pressed=true]{color:var(--gold);border-color:var(--gold-line);background:var(--gold-bg)}
   :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+  #info{padding:6px 16px 0;max-width:720px;margin:0 auto}
   main{padding:14px 14px 40px;display:grid;gap:14px;max-width:720px;margin:0 auto}
   .empty{text-align:center;color:var(--mute);padding:40px 12px;line-height:1.8}
 
-  .card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:18px 18px 8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:0 18px 8px;overflow:hidden}
+  .card .head{margin-top:16px}
   .head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
   .id{text-align:right;min-width:0;flex:1}
   .badge{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--gold);background:var(--gold-bg);border:1px solid var(--gold-line);border-radius:8px;padding:3px 10px;margin-bottom:8px}
@@ -60,6 +62,8 @@
   .levels{display:grid;grid-template-columns:repeat(3,1fr);background:var(--inset);border:1px solid var(--line);border-radius:14px;margin-top:14px;padding:12px 6px;text-align:center}
   .lv small{display:block;color:var(--mute);font-size:12.5px;margin-bottom:2px}
   .lv .num{font-size:17px}
+  .lv em{display:block;font-style:normal;font-size:12px;margin-top:3px;direction:ltr;font-family:'JetBrains Mono',monospace}
+  .lv.target em{color:var(--up)}.lv.stop em{color:var(--down)}.lv.entry em{color:var(--mute)}
   .lv.entry .num{color:var(--cyan)} .lv.target .num{color:var(--up)} .lv.stop .num{color:var(--down)}
   .open{display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:0;border-top:1px solid var(--line);margin-top:14px;padding:12px 2px;color:var(--gold);font:inherit;font-weight:700;font-size:16px;cursor:pointer}
   .open svg{transition:transform .25s}
@@ -78,11 +82,11 @@
   .star{background:none;border:0;color:var(--mute);font-size:26px;line-height:1;padding:2px 0;margin-top:2px;cursor:pointer}
   .star[aria-pressed=true]{color:var(--gold)}
   .note{margin-top:8px;font-size:12.5px;color:var(--gold);line-height:1.7}
-  .sig{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--inset);font-size:14px}
-  .sig b{font-size:16px;font-weight:800}
+  .sig{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 -18px;padding:11px 18px;border-bottom:1px solid var(--line);background:var(--inset);font-size:14px}
+  .sig b{font-size:15px;font-weight:800}
   .sig small{color:var(--mute);font-size:12.5px;line-height:1.5;text-align:left}
-  .sig.buy{border-color:rgba(61,220,151,.5);background:rgba(61,220,151,.1)} .sig.buy b{color:var(--up)}
-  .sig.sell{border-color:rgba(255,107,129,.5);background:rgba(255,107,129,.1)} .sig.sell b{color:var(--down)}
+  .sig.buy{border-color:rgba(61,220,151,.5);background:rgba(61,220,151,.14)} .sig.buy b{color:var(--up)}
+  .sig.sell{border-color:rgba(255,107,129,.5);background:rgba(255,107,129,.14)} .sig.sell b{color:var(--down)}
   .sig.wait b,.sig.na b{color:var(--mute)}
   .conds{list-style:none;margin-top:10px;padding:0;font-size:13.5px;line-height:1.9;color:var(--mute)}
   .conds .ok{color:var(--up)} .conds .no{color:var(--down)}
@@ -127,9 +131,6 @@
       <option value="plw">محفظتي: الأكبر ربحًا أولًا</option>
     </select>
   </div>
-  <div id="mkt"></div><div id="pfsum"></div>
-  <div class="track" id="track"></div><div class="track" id="trackd"></div>
-  <div class="note" id="note" hidden>الترشيح إحصائي من المؤشرات (ميل صاعد بثقة متوسطة أو قوية، وRSI تحت 80). مش ضمان إن السهم هيصعد.</div>
   <div class="chips" id="chips" role="group" aria-label="تصفية">
     <button class="chip" data-f="all" aria-pressed="true">الكل</button>
     <button class="chip" data-f="sbuy" aria-pressed="false">شراء الآن</button>
@@ -142,6 +143,11 @@
     <button class="chip" data-f="sell" aria-pressed="false">ضغط بيع</button>
   </div>
 </header>
+<section id="info">
+  <div id="mkt"></div><div id="pfsum"></div>
+  <div class="track" id="track"></div><div class="track" id="trackd"></div>
+  <div class="note" id="note" hidden>الترشيح إحصائي من المؤشرات (ميل صاعد بثقة متوسطة أو قوية، وRSI تحت 80). مش ضمان إن السهم هيصعد.</div>
+</section>
 <main id="list"></main>
 <footer>
   <div class="risk"><label>رأس المال (ج)<input id="cap" type="number" inputmode="decimal" min="0" step="any"></label>
@@ -422,17 +428,17 @@ function buildCard(u) {
   const el = document.createElement('article');
   el.className = 'card';
   el.innerHTML = `
+    <div class="sig" data-r="sigbox"><b data-r="sigt"></b><small data-r="sigw"></small></div>
     <div class="head">
       <div class="px"><div class="price num" data-r="price"></div><div class="chg num" data-r="chg"></div><button class="star" data-r="star" aria-pressed="false" aria-label="المفضلة">☆</button></div>
       <div class="id"><span class="badge" data-r="badge"></span><div class="name"></div><div class="meta"></div></div>
     </div>
     <div class="levels">
-      <div class="lv entry"><small>الدخول</small><span class="num" data-r="entry"></span></div>
-      <div class="lv target"><small>الهدف</small><span class="num" data-r="target"></span></div>
-      <div class="lv stop"><small>الوقف</small><span class="num" data-r="stop"></span></div>
+      <div class="lv entry"><small>الدخول</small><span class="num" data-r="entry"></span><em data-r="rr2"></em></div>
+      <div class="lv target"><small>الهدف</small><span class="num" data-r="target"></span><em data-r="tp"></em></div>
+      <div class="lv stop"><small>الوقف</small><span class="num" data-r="stop"></span><em data-r="sp"></em></div>
     </div>
     <div class="pl" data-r="pl"></div>
-    <div class="sig" data-r="sigbox"><b data-r="sigt"></b><small data-r="sigw"></small></div>
     <div class="warnl" data-r="warn"></div>
     <div class="fc" data-r="fc"></div>
     <button class="open" aria-expanded="false"><span>فتح التقرير الفني الكامل</span>${ARROW}</button>
@@ -525,8 +531,12 @@ function paint(u, a) {
   paintStar(c, u[0]);
   { const e = pf[u[0]];
     let t = '', cl = 'pl';
-    if (e && e.q && e.c) { const pl = (a.p - e.c) * e.q, pc = (a.p / e.c - 1) * 100; t = `مركزي: ${pl >= 0 ? 'ربح' : 'خسارة'} ${Math.abs(pl).toFixed(2)} ج (${pc >= 0 ? '+' : '−'}${Math.abs(pc).toFixed(2)}%)`; cl += pl >= 0 ? ' up' : ' down'; }
-    else if (e && e.c) { const pc = (a.p / e.c - 1) * 100; t = `مركزي: ${pc >= 0 ? '+' : '−'}${Math.abs(pc).toFixed(2)}% عن سعر شرائك`; cl += pc >= 0 ? ' up' : ' down'; }
+    const sgn = x => (x >= 0 ? '+' : '−') + Math.abs(x).toFixed(2) + '%';
+    if (e && e.c) {
+      const pc = (a.p / e.c - 1) * 100; cl += pc >= 0 ? ' up' : ' down';
+      t = 'في محفظتك: ' + (e.q ? e.q + ' سهم ' : '') + '@ ' + f2(e.c) + ' • ' + (e.q ? ((a.p - e.c) * e.q >= 0 ? 'ربح ' : 'خسارة ') + Math.abs((a.p - e.c) * e.q).toFixed(2) + ' ج ' : '') + '(' + sgn(pc) + ')';
+      if (e.s) t += ' • وقفك ' + f2(e.s) + ' (' + sgn((e.s / a.p - 1) * 100) + ' عن السعر)';
+    } else if (e && (e.s || e.t)) t = 'في محفظتك' + (e.s ? ' • وقفك ' + f2(e.s) : '') + (e.t ? ' • هدفك ' + f2(e.t) : '');
     if (r.pl.className !== cl) r.pl.className = cl; setText(c, 'pl', t); }
   { const w = [];
     if (a.signal.k === 'buy' && a.wtrend === 'down') w.push('الاتجاه الأسبوعي هابط، فالصعود اليومي ضد الاتجاه الأكبر.');
@@ -543,6 +553,9 @@ function paint(u, a) {
   { const sg = a.signal; setText(c, 'sigt', sg.t); setText(c, 'sigw', sg.why);
     const cl = 'sig ' + sg.k; if (r.sigbox.className !== cl) r.sigbox.className = cl; }
   setText(c, 'entry', f2(a.p)); setText(c, 'target', f2(a.target)); setText(c, 'stop', f2(a.stop));
+  { const pc = x => (x >= 0 ? '+' : '−') + Math.abs(x).toFixed(1) + '%';
+    setText(c, 'tp', pc((a.target / a.p - 1) * 100)); setText(c, 'sp', pc((a.stop / a.p - 1) * 100));
+    setText(c, 'rr2', Number.isFinite(a.rr) ? 'R:R 1:' + a.rr.toFixed(1) : ''); }
   if (c.open()) {
     setText(c, 'rsi', f2(a.rsi)); setText(c, 'macd', f2(a.macd));
     setText(c, 'vr', Number.isFinite(a.volRatio) ? a.volRatio.toFixed(2) + 'x' : '—');
