@@ -22,11 +22,12 @@
   }
   *{box-sizing:border-box;margin:0}
   html{-webkit-text-size-adjust:100%}
-  body{background:var(--bg);color:var(--text);font-family:'Cairo',system-ui,sans-serif;min-height:100vh;padding-bottom:env(safe-area-inset-bottom)}
+  body{background:radial-gradient(1200px 420px at 50% -120px,rgba(79,195,217,.13),transparent 70%),var(--bg);color:var(--text);font-family:'Cairo',system-ui,sans-serif;min-height:100vh;padding-bottom:env(safe-area-inset-bottom)}
   .num{font-family:'JetBrains Mono',ui-monospace,monospace;direction:ltr;unicode-bidi:isolate;font-weight:700}
   header{position:sticky;top:0;z-index:5;background:rgba(11,18,38,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:12px 16px 10px}
   .top{display:flex;align-items:center;justify-content:space-between;gap:12px}
-  h1{font-size:20px;font-weight:800}
+  h1{font-size:20px;font-weight:800;display:flex;align-items:center;gap:9px}
+  h1 svg{flex:0 0 auto}
   .status{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mute)}
   .dot{width:9px;height:9px;border-radius:50%;background:var(--flat)}
   .dot.live{background:var(--up);animation:pulse 1s infinite}
@@ -39,7 +40,7 @@
   .tools select{flex:0 0 auto}
   .chips{display:flex;gap:8px;margin-top:10px;overflow-x:auto;scrollbar-width:none}
   .chip{flex:0 0 auto;border:1px solid var(--line);background:transparent;color:var(--mute);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;cursor:pointer}
-  .chip[aria-pressed=true]{color:var(--gold);border-color:var(--gold-line);background:var(--gold-bg)}
+  .chip[aria-pressed=true]{color:#0b1226;border-color:var(--gold);background:var(--gold);font-weight:700}
   :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
   #info{padding:6px 16px 0;max-width:720px;margin:0 auto}
   main{padding:14px 14px 40px;display:grid;gap:14px;max-width:720px;margin:0 auto}
@@ -47,6 +48,9 @@
 
   .card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:0 18px 8px;overflow:hidden}
   .card .head{margin-top:16px}
+  .card{box-shadow:0 10px 30px -18px rgba(0,0,0,.8)}
+  .price{font-size:32px}
+  .name{font-size:18px}
   .head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
   .id{text-align:right;min-width:0;flex:1}
   .badge{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--gold);background:var(--gold-bg);border:1px solid var(--gold-line);border-radius:8px;padding:3px 10px;margin-bottom:8px}
@@ -60,16 +64,29 @@
   .price.up{color:var(--up)} .price.down{color:var(--down)}
   .chg{font-size:14px;margin-top:4px}
   .chg.up{color:var(--up)} .chg.down{color:var(--down)} .chg.flat{color:var(--flat)}
-  .levels{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
-  .lv{border-radius:14px;padding:12px 8px;text-align:center;border:1px solid var(--line);background:var(--inset)}
-  .lv.entry{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;text-align:right;border-color:rgba(79,195,217,.35);background:rgba(79,195,217,.07)}
-  .lv.entry small{margin:0}
-  .lv.stop{border-color:rgba(255,107,129,.45);background:linear-gradient(160deg,rgba(255,107,129,.16),rgba(255,107,129,.04))}
-  .lv.target{border-color:rgba(61,220,151,.45);background:linear-gradient(160deg,rgba(61,220,151,.16),rgba(61,220,151,.04))}
-  .lv.stop .num,.lv.target .num{font-size:22px;display:block}
-  .lv.stop em,.lv.target em{display:inline-block;margin-top:6px;padding:2px 10px;border-radius:99px;font-size:12px}
-  .lv.stop em{background:rgba(255,107,129,.2)}.lv.target em{background:rgba(61,220,151,.2)}
-  .lv.entry em{margin:0;padding:2px 10px;border-radius:99px;background:rgba(61,220,151,.15);color:var(--up);font-size:12px;order:3}
+  .gauge{margin-top:18px;padding:14px 12px 12px;border-radius:16px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0));border:1px solid var(--line)}
+  .gtrack{position:relative;height:10px;border-radius:99px;background:#0a1022;margin:18px 6px 14px}
+  .gtrack i{position:absolute;top:0;bottom:0}
+  .gtrack .zr{background:linear-gradient(90deg,rgba(255,107,129,.95),rgba(255,107,129,.35));border-radius:99px 0 0 99px}
+  .gtrack .zg{background:linear-gradient(90deg,rgba(61,220,151,.35),rgba(61,220,151,.95));border-radius:0 99px 99px 0}
+  .pin{position:absolute;top:50%;transform:translate(-50%,-50%);display:block}
+  .pin.now{width:20px;height:20px;border-radius:50%;background:var(--text);border:4px solid var(--bg);box-shadow:0 0 0 2px var(--text),0 0 16px rgba(232,236,247,.5)}
+  .pin.cost{width:14px;height:14px;background:var(--gold);transform:translate(-50%,-50%) rotate(45deg);border:2px solid var(--bg);border-radius:3px}
+  .pin.us,.pin.ut{width:3px;height:22px;border-radius:2px}
+  .pin.us{background:var(--down)}.pin.ut{background:var(--up)}
+  .glab{display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;gap:4px}
+  .glab small{display:block;color:var(--mute);font-size:11.5px;font-family:'Cairo',sans-serif}
+  .glab .num{display:block;font-size:19px;margin-top:2px}
+  .glab em{display:inline-block;font-style:normal;font-size:12px;margin-top:5px;padding:1px 9px;border-radius:99px;font-family:'JetBrains Mono',monospace}
+  .gs{text-align:left}.gt{text-align:right}
+  .gs .num{color:var(--down)}.gs em{background:rgba(255,107,129,.18);color:var(--down)}
+  .gt .num{color:var(--up)}.gt em{background:rgba(61,220,151,.18);color:var(--up)}
+  .gm .num{color:var(--text);font-size:21px}.gm em{background:rgba(255,255,255,.07);color:var(--mute)}
+  .gleg{direction:rtl;margin-top:10px;font-size:11.5px;color:var(--mute);display:flex;gap:12px;flex-wrap:justify-content;justify-content:center}.gleg:empty{display:none}
+  .gleg span::before{content:'';display:inline-block;margin-left:5px;vertical-align:middle}
+  .gleg .c::before{width:8px;height:8px;background:var(--gold);transform:rotate(45deg);border-radius:2px}
+  .gleg .s::before{width:3px;height:12px;background:var(--down);border-radius:2px}
+  .gleg .t::before{width:3px;height:12px;background:var(--up);border-radius:2px}
   .pl:not(:empty){padding:9px 12px;border-radius:12px;border:1px solid var(--gold-line);background:var(--gold-bg);color:var(--text)}
   .pl.up:not(:empty){border-color:rgba(61,220,151,.45);background:rgba(61,220,151,.08)}.pl.down:not(:empty){border-color:rgba(255,107,129,.45);background:rgba(255,107,129,.08)}
   .card .star{border:1px solid var(--line);border-radius:12px;width:42px;height:42px;display:grid;place-items:center;margin-top:8px;padding:0}
@@ -132,7 +149,7 @@
 <body>
 <header>
   <div class="top">
-    <h1>رادار البورصة</h1>
+    <h1><svg width="26" height="26" viewBox="0 0 32 32" fill="none" aria-hidden="true"><circle cx="16" cy="16" r="14" stroke="#4fc3d9" stroke-opacity=".35" stroke-width="2"/><circle cx="16" cy="16" r="8.5" stroke="#4fc3d9" stroke-opacity=".6" stroke-width="2"/><path d="M16 16 L25 7" stroke="#e8b94a" stroke-width="2.4" stroke-linecap="round"/><circle cx="16" cy="16" r="2.4" fill="#e8b94a"/></svg>رادار البورصة</h1>
     <div class="status"><span class="dot" id="dot"></span><span id="stat">جاري الاتصال</span></div>
   </div>
   <div class="banner" id="banner" hidden></div>
@@ -448,10 +465,18 @@ function buildCard(u) {
       <div class="px"><div class="price num" data-r="price"></div><div class="chg num" data-r="chg"></div><button class="star" data-r="star" aria-pressed="false" aria-label="المفضلة">☆</button></div>
       <div class="id"><span class="badge" data-r="badge"></span><div class="name"></div><div class="meta"></div></div>
     </div>
-    <div class="levels">
-      <div class="lv entry"><small>الدخول</small><span class="num" data-r="entry"></span><em data-r="rr2"></em></div>
-      <div class="lv stop"><small>وقف الخسارة</small><span class="num" data-r="stop"></span><em data-r="sp"></em></div>
-      <div class="lv target"><small>الهدف</small><span class="num" data-r="target"></span><em data-r="tp"></em></div>
+    <div class="gauge" dir="ltr">
+      <div class="gtrack">
+        <i class="zr" data-r="zr"></i><i class="zg" data-r="zg"></i>
+        <b class="pin us" data-r="pus" hidden></b><b class="pin ut" data-r="put" hidden></b>
+        <b class="pin cost" data-r="pcost" hidden></b><b class="pin now" data-r="pnow"></b>
+      </div>
+      <div class="glab">
+        <div class="gs"><small>وقف الخسارة</small><span class="num" data-r="stop"></span><em data-r="sp"></em></div>
+        <div class="gm"><small>السعر الحالي</small><span class="num" data-r="entry"></span><em data-r="rr2"></em></div>
+        <div class="gt"><small>الهدف</small><span class="num" data-r="target"></span><em data-r="tp"></em></div>
+      </div>
+      <div class="gleg" data-r="gleg" dir="rtl"></div>
     </div>
     <div class="pl" data-r="pl"></div>
     <div class="warnl" data-r="warn"></div>
@@ -571,7 +596,22 @@ function paint(u, a) {
   setText(c, 'entry', f2(a.p)); setText(c, 'target', f2(a.target)); setText(c, 'stop', f2(a.stop));
   { const pc = x => (x >= 0 ? '+' : '−') + Math.abs(x).toFixed(1) + '%';
     setText(c, 'tp', pc((a.target / a.p - 1) * 100)); setText(c, 'sp', pc((a.stop / a.p - 1) * 100));
-    setText(c, 'rr2', Number.isFinite(a.rr) ? 'R:R 1:' + a.rr.toFixed(1) : ''); }
+    setText(c, 'rr2', Number.isFinite(a.rr) ? 'R:R 1:' + a.rr.toFixed(1) : '');
+    const e = pf[u[0]] || {}, vals = [a.stop, a.target, a.p];
+    for (const x of [e.c, e.s, e.t]) if (x > 0) vals.push(x);
+    const mn = Math.min(...vals), mx = Math.max(...vals), pad = (mx - mn) * 0.06 || 1, lo = mn - pad, hi = mx + pad;
+    const pos = x => ((x - lo) / (hi - lo) * 100).toFixed(1) + '%';
+    const key = [pos(a.p), pos(a.stop), pos(a.target), e.c, e.s, e.t].join('|');
+    if (c.last.gk !== key) {
+      c.last.gk = key;
+      r.zr.style.left = pos(a.stop); r.zr.style.width = (parseFloat(pos(a.p)) - parseFloat(pos(a.stop))).toFixed(1) + '%';
+      r.zg.style.left = pos(a.p); r.zg.style.width = (parseFloat(pos(a.target)) - parseFloat(pos(a.p))).toFixed(1) + '%';
+      r.pnow.style.left = pos(a.p);
+      const put = (el, v) => { el.hidden = !(v > 0); if (v > 0) el.style.left = pos(v); };
+      put(r.pcost, e.c); put(r.pus, e.s); put(r.put, e.t);
+      const leg = []; if (e.c > 0) leg.push('<span class="c">سعر شرائك ' + f2(e.c) + '</span>'); if (e.s > 0) leg.push('<span class="s">وقفك ' + f2(e.s) + '</span>'); if (e.t > 0) leg.push('<span class="t">هدفك ' + f2(e.t) + '</span>');
+      r.gleg.innerHTML = leg.join('');
+    } }
   if (c.open()) {
     setText(c, 'rsi', f2(a.rsi)); setText(c, 'macd', f2(a.macd));
     setText(c, 'vr', Number.isFinite(a.volRatio) ? a.volRatio.toFixed(2) + 'x' : '—');
