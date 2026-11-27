@@ -535,7 +535,7 @@ function paint(u, a) {
     if (e && e.c) {
       const pc = (a.p / e.c - 1) * 100; cl += pc >= 0 ? ' up' : ' down';
       t = 'في محفظتك: ' + (e.q ? e.q + ' سهم ' : '') + '@ ' + f2(e.c) + ' • ' + (e.q ? ((a.p - e.c) * e.q >= 0 ? 'ربح ' : 'خسارة ') + Math.abs((a.p - e.c) * e.q).toFixed(2) + ' ج ' : '') + '(' + sgn(pc) + ')';
-      if (e.s) t += ' • وقفك ' + f2(e.s) + ' (' + sgn((e.s / a.p - 1) * 100) + ' عن السعر)';
+      if (e.s) t += e.s >= a.p ? ' • السعر تحت وقفك (' + f2(e.s) + ')' : ' • وقفك ' + f2(e.s) + ' (' + sgn((e.s / a.p - 1) * 100) + ' عن السعر)';
     } else if (e && (e.s || e.t)) t = 'في محفظتك' + (e.s ? ' • وقفك ' + f2(e.s) : '') + (e.t ? ' • هدفك ' + f2(e.t) : '');
     if (r.pl.className !== cl) r.pl.className = cl; setText(c, 'pl', t); }
   { const w = [];
