@@ -657,23 +657,30 @@ function track() {
   if (state.mode === 'live') {
     const c = cairoNow();
     if (c.wd !== 'Fri' && c.wd !== 'Sat') {
-      for (const sym in state.res) {
-        const a = state.res[sym], o = t.open[sym];
-        if (o && o.d < c.day && c.mins >= 660) {            // جلسة جديدة بدأت: قيّم التوقع القديم
-          const mv = (a.p / o.p - 1) * 100;
+      // الجلسة الجديدة بدأت: قيّم التوقعات القديمة، وقارنها بحركة السوق كله (الوسيط) مش بالصفر بس
+      const due = [];
+      for (const sym in state.res) { const o = t.open[sym]; if (o && o.d < c.day && c.mins >= 660) due.push([sym, o, state.res[sym]]); }
+      let med = null;
+      if (due.length >= 20) { const m = due.map(([, o, a]) => (a.p / o.p - 1) * 100).sort((x, y) => x - y); med = m[m.length >> 1]; t.mk = t.mk || { n: 0, sum: 0 }; t.mk.n++; t.mk.sum += med; }
+      for (const [sym, o, a] of due) {
+          const mv = (a.p / o.p - 1) * 100, ex = med === null ? null : mv - med;
           const ok = o.b === 'up' ? mv > 0.3 : o.b === 'down' ? mv < -0.3 : Math.abs(mv) <= SIDE;
           t.n++; if (ok) t.hit++;
           const k = o.b + '|' + (o.c || '?'), r = t.by[k] || (t.by[k] = { n: 0, h: 0, sum: 0 });
           r.n++; r.sum = (r.sum || 0) + mv; if (ok) r.h++;
+          if (ex !== null) { r.en = (r.en || 0) + 1; r.ex = (r.ex || 0) + ex; if (o.b === 'up' ? ex > 0 : o.b === 'down' ? ex < 0 : false) r.bt = (r.bt || 0) + 1; }
           const B = t.base; B.n++; if (Math.abs(mv) <= SIDE) B.side++; if (mv > 0.3) B.up++; if (mv < -0.3) B.down++;
           if (o.s === 'buy' || o.s === 'sell') {
             const g = t.sg[o.s] || (t.sg[o.s] = { n: 0, w: 0, sum: 0 });
             g.n++; g.sum += mv; if (o.s === 'buy' ? mv > 0 : mv < 0) g.w++;
+            if (ex !== null) { g.en = (g.en || 0) + 1; g.ex = (g.ex || 0) + ex; }
           }
-          t.log.push({ s: sym, d: o.d, b: o.b, c: o.c, k: o.s, p: o.p, r: o.r, v: o.v, sc: o.sc, w: o.w, ch: o.ch, mv: r2(mv) });
+          t.log.push({ s: sym, d: o.d, b: o.b, c: o.c, k: o.s, p: o.p, r: o.r, v: o.v, sc: o.sc, w: o.w, ch: o.ch, mv: r2(mv), ex: ex === null ? null : r2(ex) });
           if (t.log.length > LOG_MAX) t.log.splice(0, t.log.length - LOG_MAX);
           delete t.open[sym]; trkDirty = true;
-        }
+      }
+      for (const sym in state.res) {
+        const a = state.res[sym];
         if (!t.open[sym] && c.mins >= 870) {                  // بعد الإغلاق: سجّل توقع اليوم التالي ومؤشراته
           t.open[sym] = { d: c.day, p: a.p, b: a.outlook.bias, c: a.outlook.conf, s: a.signal.k, r: r2(a.rsi), v: r2(a.volRatio), sc: a.score, w: a.wtrend, ch: r2(a.chg) };
           trkDirty = true;
@@ -686,17 +693,18 @@ function track() {
     ? `دقة التوقعات المسجلة: ${t.hit} من ${t.n} (${Math.round(t.hit / t.n * 100)}%)`
     : 'سجل الدقة: التوقعات بتتسجل بعد إغلاق كل جلسة، والنتيجة بتظهر بعد الجلسة اللي بعدها.';
   const B = { up: 'صعود', down: 'هبوط', side: 'عرضي' }, pc = (h, n) => n ? Math.round(h / n * 100) + '% (' + h + '/' + n + ')' : '—';
-  let h = '<table class="tb"><tr><th>التوقع</th><th>اتفاق المؤشرات</th><th>الدقة</th><th>متوسط الحركة</th></tr>';
+  let h = '<table class="tb"><tr><th>التوقع</th><th>اتفاق المؤشرات</th><th>الدقة</th><th>متوسط الحركة</th><th>الفرق عن السوق</th></tr>';
   const keys = Object.keys(t.by || {}).sort();
-  for (const k of keys) { const [b, c] = k.split('|'), x = t.by[k]; h += `<tr><td>${B[b] || b}</td><td>${c}</td><td>${pc(x.h, x.n)}</td><td>${x.n && x.sum !== undefined ? (x.sum / x.n).toFixed(2) + '%' : '—'}</td></tr>`; }
+  for (const k of keys) { const [b, c] = k.split('|'), x = t.by[k]; h += `<tr><td>${B[b] || b}</td><td>${c}</td><td>${pc(x.h, x.n)}</td><td>${x.n && x.sum !== undefined ? (x.sum / x.n).toFixed(2) + '%' : '—'}</td><td>${x.en ? (x.ex / x.en >= 0 ? '+' : '') + (x.ex / x.en).toFixed(2) + '%' + (b === 'side' ? '' : ' • غلبت السوق ' + Math.round((x.bt || 0) / x.en * 100) + '%') : '—'}</td></tr>`; }
   h += '</table>';
   const S = { buy: 'إشارة شراء', sell: 'إشارة بيع' };
   let g = '';
   const bs = t.base;
   if (bs && bs.n > 0) g += `<div><b>خط الأساس</b> (بدون أي تحليل): لو قلنا «عرضي» لكل الأسهم كانت الدقة ${Math.round(bs.side / bs.n * 100)}%، و«صعود» ${Math.round(bs.up / bs.n * 100)}%، و«هبوط» ${Math.round(bs.down / bs.n * 100)}%. أي توقع لازم يعدّي نسبته عشان نقول إن التحليل بيضيف حاجة.</div>`;
-  for (const k of ['buy', 'sell']) { const x = (t.sg || {})[k]; if (x && x.n) g += `<div>${S[k]}: نجحت ${pc(x.w, x.n)} • متوسط حركة الجلسة التالية ${(x.sum / x.n).toFixed(2)}%</div>`; }
+  if (t.mk && t.mk.n) g += `<div>متوسط حركة السوق (الوسيط) في الجلسة: ${(t.mk.sum / t.mk.n).toFixed(2)}% (على ${t.mk.n} جلسة)</div>`;
+  for (const k of ['buy', 'sell']) { const x = (t.sg || {})[k]; if (x && x.n) g += `<div>${S[k]}: نجحت ${pc(x.w, x.n)} • متوسط الحركة ${(x.sum / x.n).toFixed(2)}%${x.en ? ' • الفرق عن السوق ' + (x.ex / x.en >= 0 ? '+' : '') + (x.ex / x.en).toFixed(2) + '%' : ''}</div>`; }
   const body = keys.length ? h + g : (Object.keys(t.open || {}).length ? '<div>التوقعات اتسجلت وبتستنى الجلسة الجاية. أول نتايج هتظهر بعد 11 صباح الأحد والتطبيق مفتوح.</div>' : '<div>لسه مفيش توقعات مسجلة. التسجيل بيبدأ بعد إغلاق السوق (2:30 ظهرًا) والتطبيق مفتوح.</div>');
-  const html = `<summary>تفاصيل الدقة (${(t.log || []).length} نتيجة، ${Object.keys(t.open || {}).length} توقع بانتظار الجلسة الجاية)</summary>${body}<div class="mute2">العرضي = السهم اتحرك أقل من ${SIDE}%. الأرقام من جهازك بس، ومحتاجة أسابيع قبل ما نحكم. اتفاق المؤشرات معناه إن المؤشرات متفقة مع بعض، مش ضمان للدقة.</div>`;
+  const html = `<summary>تفاصيل الدقة (${(t.log || []).length} نتيجة، ${Object.keys(t.open || {}).length} توقع بانتظار الجلسة الجاية)</summary>${body}<div class="mute2">العرضي = السهم اتحرك أقل من ${SIDE}%. الأرقام من جهازك بس، ومحتاجة أسابيع قبل ما نحكم. «الفرق عن السوق» = حركة السهم ناقص حركة السوق في نفس الجلسة، وده بيفصل جودة التحليل عن اتجاه السوق العام. اتفاق المؤشرات معناه إن المؤشرات متفقة مع بعض، مش ضمان للدقة.</div>`;
   const dt = $('trackd');
   if (dt.dataset.h !== html) { dt.dataset.h = html; const was = dt.querySelector('details'); const op = was && was.open; dt.innerHTML = '<details' + (op ? ' open' : '') + '>' + html + '</details>'; }
 }
